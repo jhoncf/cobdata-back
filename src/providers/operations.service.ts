@@ -12,6 +12,7 @@ import { QUEUES } from '../common/constants/queues';
 import {
   OperationAction,
   OperationStatus,
+  OperationItemStatus,
   ContractStatus,
   ProviderStatus,
 } from '@prisma/client';
@@ -225,7 +226,7 @@ export class OperationsService {
       }
     }
 
-    const [data, total] = await Promise.all([
+    const [operations, total] = await Promise.all([
       this.prisma.providerOperation.findMany({
         where,
         skip,
@@ -241,10 +242,13 @@ export class OperationsService {
           createdAt: true,
           updatedAt: true,
           user: { select: { id: true, name: true, email: true } },
+          wallet: { select: { id: true, name: true } },
         },
       }),
       this.prisma.providerOperation.count({ where }),
     ]);
+
+    const data = await this.withItemCounts(operations);
 
     return {
       data,
@@ -265,6 +269,7 @@ export class OperationsService {
       where: { id: operationId, accountId },
       include: {
         user: { select: { id: true, name: true, email: true } },
+        wallet: { select: { id: true, name: true } },
         items: {
           select: {
             id: true,
@@ -292,7 +297,80 @@ export class OperationsService {
       throw new NotFoundException('Operação não encontrada');
     }
 
-    return operation;
+    const [result] = await this.withItemCounts([operation]);
+    return result;
+  }
+
+  async findItems(
+    operationId: string,
+    query: { page?: number; limit?: number },
+    accountId: string,
+    userScopes?: string[],
+  ) {
+    const operation = await this.prisma.providerOperation.findFirst({
+      where: { id: operationId, accountId },
+      select: { walletId: true },
+    });
+
+    if (!operation || (userScopes && !userScopes.includes(operation.walletId))) {
+      throw new NotFoundException('Operação não encontrada');
+    }
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where = { operationId };
+    const [data, total] = await Promise.all([
+      this.prisma.providerOperationItem.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ batchIndex: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          operationId: true,
+          contractId: true,
+          status: true,
+          errorCode: true,
+          errorMessage: true,
+        },
+      }),
+      this.prisma.providerOperationItem.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  private async withItemCounts<T extends { id: string }>(operations: T[]) {
+    if (operations.length === 0) return [];
+
+    const grouped = await this.prisma.providerOperationItem.groupBy({
+      by: ['operationId', 'status'],
+      where: { operationId: { in: operations.map((operation) => operation.id) } },
+      _count: { _all: true },
+    });
+
+    const counts = new Map<string, { processedItems: number; failedItems: number }>();
+    for (const item of grouped) {
+      const current = counts.get(item.operationId) ?? { processedItems: 0, failedItems: 0 };
+      if (item.status === OperationItemStatus.FAILED) {
+        current.failedItems += item._count._all;
+      } else if (
+        item.status === OperationItemStatus.REGISTERED ||
+        item.status === OperationItemStatus.UPDATED ||
+        item.status === OperationItemStatus.REMOVED
+      ) {
+        current.processedItems += item._count._all;
+      }
+      counts.set(item.operationId, current);
+    }
+
+    return operations.map((operation) => ({
+      ...operation,
+      ...(counts.get(operation.id) ?? { processedItems: 0, failedItems: 0 }),
+    }));
   }
 
   /**

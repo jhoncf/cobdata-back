@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { Request } from 'express';
 import { OperationsService } from './operations.service';
 import { CreateOperationDto, ListOperationsDto, PreviewOperationDto } from './dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators';
@@ -74,6 +75,20 @@ export class OperationsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.operationsService.preview(query.walletId, query.action, user.accountId);
+  }
+
+  @Get(':id/items')
+  @Roles('ADMIN', 'OPERATIONAL', 'VIEWER')
+  @ApiOperation({ summary: 'List operation items', description: 'Returns paginated items and their processing status' })
+  @ApiResponse({ status: 200, description: 'Paginated operation items' })
+  async findItems(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: PaginationDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    const scopes = (req as any).userScopes as string[] | undefined;
+    return this.operationsService.findItems(id, query, user.accountId, scopes);
   }
 
   @Get(':id')
