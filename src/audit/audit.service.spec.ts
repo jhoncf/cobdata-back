@@ -132,6 +132,15 @@ describe('AuditService', () => {
         limit: 20,
         totalPages: 1,
       });
+      expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        }),
+      );
     });
 
     it('should apply action filter', async () => {
