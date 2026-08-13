@@ -8,7 +8,7 @@ export class UpdateProviderDto {
   @IsOptional()
   environment?: ProviderEnv;
 
-  @ApiPropertyOptional({ description: 'Updated provider credentials (encrypted at rest)', example: { apiKey: 'new-key' } })
+  @ApiPropertyOptional({ description: 'Updated Serasa API Key (encrypted at rest)', example: { apiKey: 'new-key' } })
   @IsObject()
   @IsOptional()
   credentials?: Record<string, any>;

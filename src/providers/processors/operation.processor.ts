@@ -13,6 +13,11 @@ import {
 } from '../adapters/provider-adapter.interface';
 import { OperationBatchJobData } from '../operations.service';
 
+const SERASA_BASE_URLS = {
+  HOMOLOGATION: 'https://api.serasa.dev/partnerportal/integration-gateway/v1',
+  PRODUCTION: 'https://api.serasa.com.br/partnerportal/integration-gateway/v1',
+} as const;
+
 @Processor(QUEUES.PROVIDER_OPERATION)
 export class OperationProcessor extends WorkerHost {
   private readonly logger = new Logger(OperationProcessor.name);
@@ -286,10 +291,17 @@ export class OperationProcessor extends WorkerHost {
       walletMappings.set(mapping.walletId, mapping.externalWalletId);
     }
 
+    const environment = provider.environment as 'HOMOLOGATION' | 'PRODUCTION';
+    const apiKey = credentials.apiKey || credentials.token;
+
+    if (typeof apiKey !== 'string' || !apiKey.trim()) {
+      throw new Error('API Key da Serasa não configurada para este canal');
+    }
+
     return {
-      apiKey: credentials.apiKey || credentials.token || '',
-      baseUrl: credentials.baseUrl || '',
-      environment: provider.environment as 'HOMOLOGATION' | 'PRODUCTION',
+      apiKey,
+      baseUrl: SERASA_BASE_URLS[environment],
+      environment,
       walletMappings,
     };
   }

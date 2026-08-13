@@ -13,7 +13,7 @@ export class CreateProviderDto {
   @IsNotEmpty()
   environment!: ProviderEnv;
 
-  @ApiProperty({ description: 'Provider credentials (encrypted at rest)', example: { apiKey: 'xxx', baseUrl: 'https://api.serasa.com' } })
+  @ApiProperty({ description: 'Serasa API Key (encrypted at rest). The API base URL is selected from the environment.', example: { apiKey: 'xxx' } })
   @IsObject()
   @IsNotEmpty()
   credentials!: Record<string, any>;
