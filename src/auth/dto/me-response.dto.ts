@@ -1,0 +1,18 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class MeResponseDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  email!: string;
+
+  @ApiPropertyOptional({ description: 'User display name', nullable: true })
+  name!: string | null;
+
+  @ApiProperty()
+  role!: string;
+
+  @ApiProperty({ description: 'Wallet IDs for VIEWER, empty for others' })
+  scopes!: string[]; // walletIds for VIEWER, empty for others
+}

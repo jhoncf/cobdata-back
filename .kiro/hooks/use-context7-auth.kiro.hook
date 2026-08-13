@@ -1,0 +1,13 @@
+{
+  "name": "Usar Context7 para auth",
+  "version": "1.0.0",
+  "description": "Consultar Context7 ao editar autenticação",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/auth/**", "**/jwt/**", "**/token/**", "**/session/**"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Use o Context7 (mcp_context7_resolve_library_id e mcp_context7_query_docs) para consultar documentação atualizada da lib de autenticação."
+  }
+}

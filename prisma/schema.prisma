@@ -1,0 +1,428 @@
+// ============================================================
+// CobData Backend — Prisma Schema
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum Role {
+  ADMIN
+  OPERATIONAL
+  VIEWER
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum WalletStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum DebtType {
+  COMMERCIAL
+  BANKING
+  SERVICES
+  UTILITIES
+  TELECOM
+  EDUCATION
+  HEALTH
+  CONDOMINIAL
+  OTHER
+}
+
+enum ProviderStatus {
+  PENDING
+  SENT
+  REGISTERED
+  UPDATED
+  FAILED
+  REMOVING
+  REMOVED
+  IN_AGREEMENT
+  AGREEMENT_BREACHED
+  PAID
+}
+
+enum ContractStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum ImportBatchStatus {
+  PENDING_VALIDATION
+  VALIDATING
+  VALIDATED
+  VALIDATED_WITH_ERRORS
+  VALIDATION_FAILED
+  APPLYING
+  APPLIED
+  FAILED
+  CANCELLED
+}
+
+enum ProviderType {
+  SERASA_LNOP
+}
+
+enum ProviderEnv {
+  HOMOLOGATION
+  PRODUCTION
+}
+
+enum OperationAction {
+  CREATE_OR_UPDATE
+  REMOVE
+}
+
+enum OperationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  PARTIALLY_FAILED
+  FAILED
+  CANCELLED
+}
+
+enum OperationItemStatus {
+  PENDING
+  WAITING_PROVIDER_EVENT
+  REGISTERED
+  UPDATED
+  REMOVED
+  FAILED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  UNMATCHED
+  DUPLICATE
+}
+
+// ============ CORE ============
+
+model Account {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users              User[]
+  creditors          Creditor[]
+  wallets            Wallet[]
+  contracts          Contract[]
+  providers          Provider[]
+  importBatches      ImportBatch[]
+  providerOperations ProviderOperation[]
+}
+
+model User {
+  id                String   @id @default(uuid())
+  accountId         String
+  email             String   @unique
+  passwordHash      String?
+  name              String?
+  role              Role
+  isActive          Boolean  @default(false)
+  mustResetPassword Boolean  @default(false)
+  twoFactorSecret   String?
+  twoFactorEnabled  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  account            Account             @relation(fields: [accountId], references: [id])
+  scopes             UserScope[]
+  sessions           Session[]
+  invites            Invite[]
+  auditLogs          AuditLog[]
+  providerOperations ProviderOperation[]
+}
+
+model UserScope {
+  id       String @id @default(uuid())
+  userId   String
+  walletId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@unique([userId, walletId])
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  tokenFamily      String   @unique @default(uuid())
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  isRevoked        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+  lastUsedAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Invite {
+  id        String       @id @default(uuid())
+  userId    String
+  token     String       @unique
+  role      Role
+  scopes    Json?
+  status    InviteStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// ============ BUSINESS ============
+
+model Creditor {
+  id        String    @id @default(uuid())
+  accountId String
+  name      String
+  cnpj      String?   @unique
+  contacts  Json?
+  address   Json?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  account Account  @relation(fields: [accountId], references: [id])
+  wallets Wallet[]
+}
+
+model Wallet {
+  id         String       @id @default(uuid())
+  accountId  String
+  creditorId String
+  name       String
+  status     WalletStatus @default(ACTIVE)
+  deletedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  account            Account             @relation(fields: [accountId], references: [id])
+  creditor           Creditor            @relation(fields: [creditorId], references: [id])
+  contracts          Contract[]
+  importBatches      ImportBatch[]
+  userScopes         UserScope[]
+  walletMappings     WalletMapping[]
+  providerOperations ProviderOperation[]
+}
+
+model Contract {
+  id                 String         @id @default(uuid())
+  accountId          String
+  walletId           String
+  debtorDocument     String
+  debtorDocumentHash String
+  debtorName         String         @default("")
+  contractNumber     String
+  debtType           DebtType
+  occurrenceDate     DateTime
+  dueDate            DateTime?
+  originalValue      Decimal        @db.Decimal(15, 2)
+  updatedValue       Decimal?       @db.Decimal(15, 2)
+  debtOrigin         String?
+  debtOriginDocHash  String?
+  productName        String?
+  debtorStreet       String?
+  debtorCity         String?
+  debtorPhone        String?
+  debtorEmail        String?
+  isNegativated      Boolean        @default(false)
+  cancelledAt        DateTime?
+  offer              Json?
+  deduplicationKey   String         @unique
+  providerStatus     ProviderStatus @default(PENDING)
+  status             ContractStatus @default(ACTIVE)
+  debtId             String?
+  paidInstallments   Int            @default(0)
+  deletedAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  account        Account                 @relation(fields: [accountId], references: [id])
+  wallet         Wallet                  @relation(fields: [walletId], references: [id])
+  tags           ContractTag[]
+  operationItems ProviderOperationItem[]
+
+  @@index([walletId, providerStatus])
+  @@index([walletId, status, deletedAt])
+  @@index([debtorDocumentHash])
+}
+
+model ContractTag {
+  id         String @id @default(uuid())
+  contractId String
+  tag        String
+
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@unique([contractId, tag])
+  @@index([tag])
+}
+
+// ============ IMPORTS ============
+
+model ImportBatch {
+  id            String            @id @default(uuid())
+  accountId     String
+  walletId      String
+  userId        String
+  fileName      String
+  fileUrl       String
+  columnMapping Json
+  totalLines    Int
+  validLines    Int               @default(0)
+  invalidLines  Int               @default(0)
+  createdCount  Int               @default(0)
+  updatedCount  Int               @default(0)
+  ignoredCount  Int               @default(0)
+  status        ImportBatchStatus @default(PENDING_VALIDATION)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  account Account            @relation(fields: [accountId], references: [id])
+  wallet  Wallet             @relation(fields: [walletId], references: [id])
+  errors  ImportBatchError[]
+}
+
+model ImportBatchError {
+  id         String  @id @default(uuid())
+  batchId    String
+  lineNumber Int
+  errorCode  String
+  fieldName  String
+  message    String
+  fieldValue String?
+
+  batch ImportBatch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+}
+
+// ============ PROVIDERS ============
+
+model Provider {
+  id          String       @id @default(uuid())
+  accountId   String
+  type        ProviderType @unique
+  environment ProviderEnv
+  credentials String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  account        Account             @relation(fields: [accountId], references: [id])
+  walletMappings WalletMapping[]
+  operations     ProviderOperation[]
+  webhookEvents  WebhookEvent[]
+}
+
+model WalletMapping {
+  id               String @id @default(uuid())
+  providerId       String
+  walletId         String
+  externalWalletId String
+
+  provider Provider @relation(fields: [providerId], references: [id])
+  wallet   Wallet   @relation(fields: [walletId], references: [id])
+
+  @@unique([providerId, walletId])
+}
+
+model ProviderOperation {
+  id         String          @id @default(uuid())
+  accountId  String
+  providerId String
+  walletId   String
+  userId     String
+  action     OperationAction
+  status     OperationStatus @default(PENDING)
+  totalItems Int
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  account  Account                 @relation(fields: [accountId], references: [id])
+  provider Provider                @relation(fields: [providerId], references: [id])
+  wallet   Wallet                  @relation(fields: [walletId], references: [id])
+  user     User                    @relation(fields: [userId], references: [id])
+  items    ProviderOperationItem[]
+}
+
+model ProviderOperationItem {
+  id            String              @id @default(uuid())
+  operationId   String
+  contractId    String
+  batchIndex    Int
+  status        OperationItemStatus @default(PENDING)
+  transactionId String?
+  debtId        String?
+  errorCode     String?
+  errorMessage  String?
+  attempts      Int                 @default(0)
+  lastAttemptAt DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  operation ProviderOperation @relation(fields: [operationId], references: [id])
+  contract  Contract          @relation(fields: [contractId], references: [id])
+
+  @@index([operationId, batchIndex])
+  @@index([transactionId])
+}
+
+model WebhookEvent {
+  id            String        @id @default(uuid())
+  providerId    String
+  eventType     String
+  transactionId String?
+  payload       Json
+  status        WebhookStatus @default(RECEIVED)
+  processedAt   DateTime?
+  createdAt     DateTime      @default(now())
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@unique([transactionId, eventType])
+  @@index([transactionId])
+}
+
+// ============ AUDIT ============
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  action       String
+  userId       String?
+  resourceType String?
+  resourceId   String?
+  requestId    String
+  operationId  String?
+  jobId        String?
+  ipAddress    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([action, createdAt])
+  @@index([userId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([requestId])
+}

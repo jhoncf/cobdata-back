@@ -1,0 +1,13 @@
+{
+  "name": "Usar PostgreSQL MCP",
+  "version": "1.0.0",
+  "description": "Usar MCP Postgres para banco de dados",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": [".*sql.*", ".*migrat.*", ".*database.*", ".*postgres.*"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Use o MCP do PostgreSQL para executar queries, criar migrations e manipular schemas."
+  }
+}
