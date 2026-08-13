@@ -37,6 +37,11 @@ describe('WalletsService', () => {
       contract: {
         count: jest.fn(),
         findMany: jest.fn(),
+        groupBy: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn().mockResolvedValue({
+          _count: { _all: 0 },
+          _sum: { originalValue: null },
+        }),
       },
     };
 
@@ -99,6 +104,17 @@ describe('WalletsService', () => {
         limit: 20,
         totalPages: 1,
       });
+      expect(prisma.wallet.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            _count: {
+              select: {
+                contracts: { where: { deletedAt: null } },
+              },
+            },
+          }),
+        }),
+      );
     });
 
     it('should filter by search (name substring)', async () => {
@@ -152,11 +168,14 @@ describe('WalletsService', () => {
   describe('findById', () => {
     it('should return wallet with summary', async () => {
       prisma.wallet.findFirst.mockResolvedValue(mockWallet);
-      prisma.contract.findMany.mockResolvedValue([
-        { providerStatus: 'PENDING', originalValue: 100.5 },
-        { providerStatus: 'PENDING', originalValue: 200.0 },
-        { providerStatus: 'REGISTERED', originalValue: 50.0 },
+      prisma.contract.groupBy.mockResolvedValue([
+        { providerStatus: 'PENDING', _count: { _all: 2 } },
+        { providerStatus: 'REGISTERED', _count: { _all: 1 } },
       ]);
+      prisma.contract.aggregate.mockResolvedValue({
+        _count: { _all: 3 },
+        _sum: { originalValue: 350.5 },
+      });
 
       const result = await service.findById(mockWalletId, mockAccountId);
 
@@ -187,8 +206,6 @@ describe('WalletsService', () => {
 
     it('should allow access when VIEWER wallet is in scope', async () => {
       prisma.wallet.findFirst.mockResolvedValue(mockWallet);
-      prisma.contract.findMany.mockResolvedValue([]);
-
       const result = await service.findById(mockWalletId, mockAccountId, [mockWalletId]);
 
       expect(result.id).toBe(mockWalletId);
@@ -262,12 +279,15 @@ describe('WalletsService', () => {
 
   describe('getWalletSummary', () => {
     it('should compute summary with contracts grouped by status', async () => {
-      prisma.contract.findMany.mockResolvedValue([
-        { providerStatus: 'PENDING', originalValue: 1000 },
-        { providerStatus: 'PENDING', originalValue: 500 },
-        { providerStatus: 'SENT', originalValue: 750 },
-        { providerStatus: 'REGISTERED', originalValue: 300 },
+      prisma.contract.groupBy.mockResolvedValue([
+        { providerStatus: 'PENDING', _count: { _all: 2 } },
+        { providerStatus: 'SENT', _count: { _all: 1 } },
+        { providerStatus: 'REGISTERED', _count: { _all: 1 } },
       ]);
+      prisma.contract.aggregate.mockResolvedValue({
+        _count: { _all: 4 },
+        _sum: { originalValue: 2550 },
+      });
 
       const summary = await service.getWalletSummary(mockWalletId);
 
@@ -281,8 +301,6 @@ describe('WalletsService', () => {
     });
 
     it('should return zero summary when no contracts', async () => {
-      prisma.contract.findMany.mockResolvedValue([]);
-
       const summary = await service.getWalletSummary(mockWalletId);
 
       expect(summary.totalContracts).toBe(0);

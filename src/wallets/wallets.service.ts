@@ -76,7 +76,14 @@ export class WalletsService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { creditor: { select: { id: true, name: true } } },
+        include: {
+          creditor: { select: { id: true, name: true } },
+          _count: {
+            select: {
+              contracts: { where: { deletedAt: null } },
+            },
+          },
+        },
       }),
       this.prisma.wallet.count({ where }),
     ]);
