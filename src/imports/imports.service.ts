@@ -182,6 +182,9 @@ export class ImportsService {
           status: true,
           createdAt: true,
           updatedAt: true,
+          wallet: {
+            select: { id: true, name: true, creditorId: true },
+          },
         },
       }),
       this.prisma.importBatch.count({ where }),
