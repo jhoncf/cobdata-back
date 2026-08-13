@@ -45,8 +45,8 @@ async function bootstrap() {
   // OpenAPI/Swagger — only in dev/staging
   if (nodeEnv !== 'production') {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('CobData API')
-      .setDescription('CobData Backend MVP — REST API for debt management')
+      .setTitle('CobCom - CRM API')
+      .setDescription('CobCom - CRM — REST API para gestão de cobranças')
       .setVersion('0.1.0')
       .addBearerAuth(
         {
