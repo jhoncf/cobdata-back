@@ -6,9 +6,9 @@ import Redis from 'ioredis';
 @Injectable()
 export class PublicDebtRateLimitService {
   private readonly redis: Redis;
-  private readonly windowSeconds = 15 * 60;
-  private readonly maxLookups = 10;
-  private readonly maxPixRequests = 5;
+  private readonly windowSeconds = 60;
+  private readonly maxLookups = 3;
+  private readonly maxPixRequests = 3;
 
   constructor(config: ConfigService) {
     this.redis = new Redis({
