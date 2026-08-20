@@ -18,10 +18,13 @@ import { BbPixWebhookController } from './webhooks/bb-pix-webhook.controller';
 import { BbPixWebhookService } from './webhooks/bb-pix-webhook.service';
 import { BbWebhookAuthGuard } from './webhooks/bb-webhook-auth.guard';
 import { BbWebhookRegistrationService } from './webhooks/bb-webhook-registration.service';
+import { PublicDebtController } from './public-debt.controller';
+import { PublicDebtService } from './public-debt.service';
+import { PublicDebtRateLimitService } from './public-debt-rate-limit.service';
 
 @Module({
   imports: [AuditModule, ScheduleModule.forRoot()],
-  controllers: [PaymentGatewaysController, PaymentChargesController, BbPixWebhookController],
+  controllers: [PaymentGatewaysController, PaymentChargesController, BbPixWebhookController, PublicDebtController],
   providers: [
     PaymentGatewaysService,
     PaymentChargesService,
@@ -36,6 +39,8 @@ import { BbWebhookRegistrationService } from './webhooks/bb-webhook-registration
     BbPixWebhookService,
     BbWebhookAuthGuard,
     BbWebhookRegistrationService,
+    PublicDebtService,
+    PublicDebtRateLimitService,
     {
       provide: PAYMENT_ADAPTERS_TOKEN,
       useFactory: (bbAdapter: BancoDoBrasilPaymentAdapter) => [bbAdapter],

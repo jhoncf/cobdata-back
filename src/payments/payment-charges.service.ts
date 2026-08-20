@@ -312,7 +312,7 @@ export class PaymentChargesService {
   async createPixForContract(
     contractId: string,
     accountId: string,
-    userId: string,
+    userId: string | undefined,
     requestId: string,
   ) {
     const contract = await this.prisma.contract.findFirst({
@@ -763,7 +763,7 @@ export class PaymentChargesService {
       idempotencyKey: string;
       txid?: string;
       expiresAt?: Date;
-      userId: string;
+      userId: string | undefined;
       requestId: string;
     },
   ) {
