@@ -323,6 +323,12 @@ export class PaymentChargesService {
       throw new NotFoundException('Contract not found');
     }
 
+    if (contract.providerStatus === 'PAID') {
+      throw new UnprocessableEntityException(
+        'A fully paid contract cannot receive a new Pix charge',
+      );
+    }
+
     // Require updatedValue
     if (!contract.updatedValue || parseFloat(contract.updatedValue.toString()) <= 0) {
       throw new UnprocessableEntityException(
@@ -449,6 +455,7 @@ export class PaymentChargesService {
         debtorDocument: normalizedDoc,
         contractNumber: dto.contractNumber,
         status: 'ACTIVE',
+        providerStatus: { not: 'PAID' },
         deletedAt: null,
         updatedValue: { gt: 0 },
       },
