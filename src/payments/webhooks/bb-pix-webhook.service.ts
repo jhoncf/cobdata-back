@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   PaymentChargeStatus,
@@ -198,6 +199,7 @@ export class BbPixWebhookService {
     });
 
     if (existing) {
+      await this.refreshContractPaymentProjection(charge.contractId);
       return;
     }
 
@@ -214,16 +216,57 @@ export class BbPixWebhookService {
           externalPaymentId: endToEndId,
         },
       });
+      await this.refreshContractPaymentProjection(charge.contractId);
     } catch (error: any) {
       // Handle unique constraint violation (race condition between concurrent webhooks)
       if (error?.code === 'P2002') {
         this.logger.debug(
           `Settlement already exists for endToEndId=${endToEndId} (concurrent creation)`,
         );
+        await this.refreshContractPaymentProjection(charge.contractId);
         return;
       }
       throw error;
     }
+  }
+
+  /**
+   * Updates the contract projection consumed by the contracts list.
+   * A contract is marked PAID only after its confirmed settlements cover the
+   * current debt value, preserving partial-payment and installment flows.
+   */
+  private async refreshContractPaymentProjection(contractId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const [contract, aggregation] = await Promise.all([
+        tx.contract.findUnique({ where: { id: contractId } }),
+        tx.paymentSettlement.aggregate({
+          where: {
+            contractId,
+            status: PaymentSettlementStatus.CONFIRMED,
+          },
+          _sum: { amount: true },
+          _max: { paidAt: true },
+        }),
+      ]);
+
+      if (!contract) {
+        this.logger.warn(`No Contract found for payment projection: ${contractId}`);
+        return;
+      }
+
+      const totalPaid = aggregation._sum.amount ?? new Prisma.Decimal(0);
+      const targetAmount = contract.updatedValue ?? contract.originalValue;
+      const isFullyPaid = totalPaid.greaterThanOrEqualTo(targetAmount);
+
+      await tx.contract.update({
+        where: { id: contractId },
+        data: {
+          totalPaidAmount: totalPaid,
+          lastPaymentAt: aggregation._max.paidAt ?? contract.lastPaymentAt,
+          ...(isFullyPaid ? { providerStatus: 'PAID' } : {}),
+        },
+      });
+    });
   }
 
   /**
