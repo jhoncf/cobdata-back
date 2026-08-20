@@ -3,6 +3,7 @@ export interface ImportLineData {
 }
 
 const HEADER_FIELD_MAP: Record<string, string> = {
+  'contrato': 'contractNumber',
   'num_adm': 'contractNumber',
   'cliente': 'debtorName',
   'nome_cliente': 'debtorName',
@@ -13,6 +14,11 @@ const HEADER_FIELD_MAP: Record<string, string> = {
   'm_contrato': 'occurrenceDate',
   'vlr': 'originalValue',
   'valor_divida': 'originalValue',
+  'valor_atualizado': 'originalValue',
+  'valor_boleto': 'originalValue',
+  'vencimento_original': 'dueDate',
+  'dt_vencimento': 'dueDate',
+  'origem': 'debtOrigin',
   'telefone': 'debtorPhone',
   'telefone_cliente': 'debtorPhone',
   'email': 'debtorEmail',
@@ -33,7 +39,18 @@ const HEADER_FIELD_MAP: Record<string, string> = {
  */
 const DUPLICATE_HEADER_FIELD_MAP: Record<string, string> = {
   'valor_divida': 'updatedValue',
+  'valor_atualizado': 'updatedValue',
 };
+
+function normalizeHeader(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+}
 
 export function normalizeColumnMapping(
   columnMapping: Record<string, string>,
@@ -49,7 +66,7 @@ export function normalizeColumnMapping(
   }
 
   for (const header of headers) {
-    const normalizedHeader = header.trim().toLowerCase();
+    const normalizedHeader = normalizeHeader(header);
     const targetField = HEADER_FIELD_MAP[normalizedHeader];
     if (targetField && !normalized[targetField]) normalized[targetField] = header;
 
