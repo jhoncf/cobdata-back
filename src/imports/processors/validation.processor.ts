@@ -381,13 +381,16 @@ export class ValidationProcessor extends WorkerHost {
     if (rows.length < 2) return []; // Only header or empty
 
     const headerRow = rows[0]!;
-    const headers = this.parseCsvRow(headerRow);
+    const delimiter = this.detectCsvDelimiter(headerRow);
+    const headers = this.parseCsvRow(headerRow, delimiter).map((header) =>
+      header.replace(/^\uFEFF/, '').trim(),
+    );
 
     const normalizedMapping = normalizeColumnMapping(columnMapping, headers);
     const lines: LineData[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i]!;
-      const values = this.parseCsvRow(row);
+      const values = this.parseCsvRow(row, delimiter);
       const lineData: LineData = {};
 
       for (const [targetField, sourceColumn] of Object.entries(normalizedMapping)) {
@@ -444,7 +447,13 @@ export class ValidationProcessor extends WorkerHost {
   /**
    * Simple CSV row parser (handles basic quoting).
    */
-  private parseCsvRow(row: string): string[] {
+  private detectCsvDelimiter(headerRow: string): string {
+    return [';', ',', '\t', '|'].reduce((best, delimiter) =>
+      headerRow.split(delimiter).length > headerRow.split(best).length ? delimiter : best,
+    ',');
+  }
+
+  private parseCsvRow(row: string, delimiter = ','): string[] {
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -458,7 +467,7 @@ export class ValidationProcessor extends WorkerHost {
         } else {
           inQuotes = !inQuotes;
         }
-      } else if (char === ',' && !inQuotes) {
+      } else if (char === delimiter && !inQuotes) {
         result.push(current);
         current = '';
       } else {

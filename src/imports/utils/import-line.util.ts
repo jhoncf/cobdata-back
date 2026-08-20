@@ -64,10 +64,41 @@ export function normalizeColumnMapping(
 
 export function normalizeImportLine(line: ImportLineData): ImportLineData {
   const normalized = { ...line };
-  const date = normalized.occurrenceDate?.trim();
-  if (date && /^\d{8}$/.test(date)) {
-    normalized.occurrenceDate = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  for (const field of ['occurrenceDate', 'dueDate', 'cancelledAt']) {
+    const value = normalized[field]?.trim();
+    if (value && /^\d{8}$/.test(value)) {
+      normalized[field] = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+    } else if (value && /^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+      const [day, month, year] = value.split('/');
+      normalized[field] = `${year}-${month}-${day}`;
+    }
   }
-  if (!normalized.debtType?.trim()) normalized.debtType = 'OTHER';
+
+  for (const field of ['originalValue', 'updatedValue']) {
+    const value = normalized[field]?.trim();
+    if (value && /^\d{1,3}(?:\.\d{3})*,\d+$/.test(value)) {
+      normalized[field] = value.replace(/\./g, '').replace(',', '.');
+    } else if (value && /^\d+,\d+$/.test(value)) {
+      normalized[field] = value.replace(',', '.');
+    }
+  }
+
+  // Some channel templates provide only a due date. Use it as the occurrence
+  // reference so a valid contract can still be created and retain the original
+  // due date separately.
+  if (!normalized.occurrenceDate?.trim() && normalized.dueDate?.trim()) {
+    normalized.occurrenceDate = normalized.dueDate;
+  }
+
+  const debtType = normalized.debtType?.trim().toUpperCase();
+  const debtTypeMap: Record<string, string> = {
+    INTERNET: 'TELECOM',
+    TELEFONIA: 'TELECOM',
+    TELECOMUNICACOES: 'TELECOM',
+    ENERGIA: 'UTILITIES',
+    AGUA: 'UTILITIES',
+    CONDOMINIO: 'CONDOMINIAL',
+  };
+  normalized.debtType = debtTypeMap[debtType || ''] ?? (debtType || 'OTHER');
   return normalized;
 }
