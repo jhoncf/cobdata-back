@@ -19,6 +19,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { MeResponseDto } from './dto/me-response.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
+import { EmailService } from '../common/email';
 
 const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password';
 const INVALID_REFRESH_TOKEN_MESSAGE = 'Invalid or expired refresh token';
@@ -38,6 +39,7 @@ export class AuthService {
     private readonly passwordResetService: PasswordResetService,
     private readonly sessionService: SessionService,
     private readonly tokenService: TokenService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -303,8 +305,15 @@ export class AuthService {
       // Store in Redis: key=`password-reset:${hash}`, value=user.id, TTL=3600 (1 hour)
       await this.passwordResetService.store(hash, user.id, 3600);
 
-      // TODO: Send email with reset link (stub for now)
-      this.logger.log(`Password reset token generated for user ${user.id}`);
+      try {
+        await this.emailService.sendPasswordReset(user.email, token);
+      } catch (error) {
+        // Preserve the non-enumerating contract of this endpoint.
+        this.logger.error(
+          `Unable to send password reset email for user ${user.id}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
     }
 
     // 3. ALWAYS return silently — never reveal if email exists

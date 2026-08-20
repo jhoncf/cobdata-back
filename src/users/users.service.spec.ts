@@ -4,6 +4,7 @@ import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../auth/services/session.service';
 import { Role } from '@prisma/client';
+import { EmailService } from '../common/email';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -36,6 +37,10 @@ describe('UsersService', () => {
     revokeAll: jest.fn(),
   };
 
+  const mockEmailService = {
+    sendInvitation: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -47,6 +52,10 @@ describe('UsersService', () => {
         {
           provide: SessionService,
           useValue: mockSessionService,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
         },
       ],
     }).compile();

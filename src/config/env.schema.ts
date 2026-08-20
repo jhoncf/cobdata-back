@@ -9,6 +9,11 @@ export const envSchema = z.object({
 
   // CORS
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+
+  // Email - Amazon SES
+  SES_REGION: z.string().default('us-east-1'),
+  SES_FROM_EMAIL: z.string().email().optional(),
 
   // Database
   DATABASE_URL: z.string().url(),

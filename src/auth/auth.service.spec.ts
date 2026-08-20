@@ -7,6 +7,7 @@ import { PasswordService } from './services/password.service';
 import { PasswordResetService } from './services/password-reset.service';
 import { SessionService } from './services/session.service';
 import { TokenService } from './services/token.service';
+import { EmailService } from '../common/email';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -100,6 +101,12 @@ describe('AuthService', () => {
               hash: 'mock-token-hash',
             }),
             hashRefreshToken: jest.fn().mockReturnValue('hashed-incoming-token'),
+          },
+        },
+        {
+          provide: EmailService,
+          useValue: {
+            sendPasswordReset: jest.fn(),
           },
         },
       ],

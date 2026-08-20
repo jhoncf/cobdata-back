@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../auth/services/session.service';
 import { InviteUserDto, ListUsersQueryDto, UpdateUserDto } from './dto';
 import { PaginatedResponse } from '../common/dto';
+import { EmailService } from '../common/email';
 
 @Injectable()
 export class UsersService {
@@ -17,6 +18,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessionService: SessionService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -25,7 +27,7 @@ export class UsersService {
    * - Creates or reuses inactive user record
    * - Generates invite token with 72h expiry
    * - Creates UserScope records for VIEWER role
-   * - Sends email (stub in MVP)
+   * - Sends an activation email through the configured provider
    */
   async invite(dto: InviteUserDto, accountId: string) {
     const email = dto.email.toLowerCase().trim();
@@ -86,8 +88,8 @@ export class UsersService {
       });
     }
 
-    // 7. Send email (stub)
-    this.logger.log(`Invite email would be sent to ${email} with token`);
+    // 7. Send the activation email
+    await this.emailService.sendInvitation(email, token);
 
     return {
       id: user!.id,
@@ -308,8 +310,8 @@ export class UsersService {
       },
     });
 
-    // 6. Send email (stub)
-    this.logger.log(`Resend invite email to ${user.email} with new token`);
+    // 6. Send the activation email
+    await this.emailService.sendInvitation(user.email, token);
 
     return {
       message: 'Invite resent successfully',
