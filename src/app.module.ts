@@ -12,7 +12,9 @@ import { ContractsModule } from './contracts/contracts.module';
 import { ImportsModule } from './imports/imports.module';
 import { ProvidersModule } from './providers/providers.module';
 import { AuditModule } from './audit/audit.module';
+import { PaymentsModule } from './payments/payments.module';
 import { HealthModule } from './health/health.module';
+import { SearchModule } from './search/search.module';
 import { JwtAuthGuard, RolesGuard, ScopeGuard, MustResetPasswordGuard } from './common/guards';
 import { AuditInterceptor } from './common/interceptors';
 import { RequestIdMiddleware } from './common/middleware';
@@ -50,7 +52,9 @@ import { QUEUES } from './common/constants/queues';
     ImportsModule,
     ProvidersModule,
     AuditModule,
+    PaymentsModule,
     HealthModule,
+    SearchModule,
   ],
   controllers: [],
   providers: [

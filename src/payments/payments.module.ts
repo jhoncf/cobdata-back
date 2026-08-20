@@ -1,0 +1,41 @@
+import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
+import { PaymentGatewaysController } from './payment-gateways.controller';
+import { PaymentChargesController } from './payment-charges.controller';
+import { PaymentGatewaysService } from './payment-gateways.service';
+import { PaymentChargesService } from './payment-charges.service';
+import { PaymentProviderFactory, PAYMENT_ADAPTERS_TOKEN } from './adapters/payment-provider.factory';
+import { BancoDoBrasilPaymentAdapter } from './adapters/banco-do-brasil/banco-do-brasil-payment.adapter';
+import { BancoDoBrasilHttpClient } from './adapters/banco-do-brasil/bb-http-client.service';
+import { BancoDoBrasilAuthService } from './adapters/banco-do-brasil/bb-auth.service';
+import { SettlementProcessorService } from './settlement/settlement-processor.service';
+import { ChargeLifecycleJob } from './charge-lifecycle.job';
+import { PrismaService } from '../prisma/prisma.service';
+import { CryptoService } from '../providers/crypto.service';
+import { ConfigService } from '@nestjs/config';
+import { AuditModule } from '../audit/audit.module';
+
+@Module({
+  imports: [AuditModule, ScheduleModule.forRoot()],
+  controllers: [PaymentGatewaysController, PaymentChargesController],
+  providers: [
+    PaymentGatewaysService,
+    PaymentChargesService,
+    SettlementProcessorService,
+    ChargeLifecycleJob,
+    PrismaService,
+    CryptoService,
+    ConfigService,
+    BancoDoBrasilPaymentAdapter,
+    BancoDoBrasilHttpClient,
+    BancoDoBrasilAuthService,
+    {
+      provide: PAYMENT_ADAPTERS_TOKEN,
+      useFactory: (bbAdapter: BancoDoBrasilPaymentAdapter) => [bbAdapter],
+      inject: [BancoDoBrasilPaymentAdapter],
+    },
+    PaymentProviderFactory,
+  ],
+  exports: [PaymentGatewaysService, PaymentChargesService, SettlementProcessorService],
+})
+export class PaymentsModule {}

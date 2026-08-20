@@ -127,6 +127,9 @@ model Account {
   providers          Provider[]
   importBatches      ImportBatch[]
   providerOperations ProviderOperation[]
+  paymentGateways    PaymentGateway[]
+  paymentCharges     PaymentCharge[]
+  paymentSettlements PaymentSettlement[]
 }
 
 model User {
@@ -246,6 +249,11 @@ model Contract {
   debtorCity         String?
   debtorPhone        String?
   debtorEmail        String?
+  debtorAddressNumber     String?
+  debtorAddressComplement String?
+  debtorNeighborhood      String?
+  debtorState             String?
+  debtorZipCode           String?
   isNegativated      Boolean        @default(false)
   cancelledAt        DateTime?
   offer              Json?
@@ -254,6 +262,8 @@ model Contract {
   status             ContractStatus @default(ACTIVE)
   debtId             String?
   paidInstallments   Int            @default(0)
+  totalPaidAmount    Decimal        @default(0) @db.Decimal(15, 2)
+  lastPaymentAt      DateTime?
   deletedAt          DateTime?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
@@ -262,6 +272,8 @@ model Contract {
   wallet         Wallet                  @relation(fields: [walletId], references: [id])
   tags           ContractTag[]
   operationItems ProviderOperationItem[]
+  paymentCharges PaymentCharge[]
+  paymentSettlements PaymentSettlement[]
 
   @@index([walletId, providerStatus])
   @@index([walletId, status, deletedAt])
@@ -402,6 +414,154 @@ model WebhookEvent {
 
   @@unique([transactionId, eventType])
   @@index([transactionId])
+}
+
+// ============ PAYMENTS ============
+
+enum PaymentProviderType {
+  BANCO_DO_BRASIL
+}
+
+enum PaymentMethod {
+  BOLETO
+  PIX
+  BOLEPIX
+}
+
+enum PaymentGatewayEnvironment {
+  SANDBOX
+  PRODUCTION
+}
+
+enum PaymentChargeStatus {
+  PENDING
+  ISSUED
+  PAID
+  CANCELLED
+  EXPIRED
+  FAILED
+}
+
+enum PaymentChargeChannel {
+  COBCOM
+  LANDING_PAGE
+  WHATSAPP
+  CHATBOT
+}
+
+enum PaymentSettlementSource {
+  PIX
+  SERASA
+  MANUAL
+}
+
+enum PaymentSettlementStatus {
+  CONFIRMED
+  REVERSED
+}
+
+model PaymentGateway {
+  id                   String                    @id @default(uuid())
+  accountId            String
+  name                 String
+  providerType         PaymentProviderType
+  environment          PaymentGatewayEnvironment
+  enabled              Boolean                   @default(false)
+  supportedMethods     PaymentMethod[]
+  pixKey               String?
+  encryptedCredentials String                    @db.Text
+  timeoutMs            Int                       @default(30000)
+  maxRetries           Int                       @default(3)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  account        Account         @relation(fields: [accountId], references: [id])
+  paymentCharges PaymentCharge[]
+
+  @@unique([accountId, providerType, environment])
+}
+
+model PaymentCharge {
+  id                String                @id @default(uuid())
+  accountId         String
+  contractId        String
+  paymentGatewayId  String
+  method            PaymentMethod
+  status            PaymentChargeStatus   @default(PENDING)
+  amount            Decimal               @db.Decimal(15, 2)
+  dueDate           DateTime
+  idempotencyKey    String
+  externalId        String?
+  externalStatus    String?
+  ourNumber         String?
+  txid              String?
+  digitableLine     String?
+  barcode           String?
+  pixCopyPaste      String?
+  qrCodeUrl         String?
+  documentUrl       String?
+  providerPayload   Json?
+  failureCode       String?
+  failureMessage    String?
+  issuedAt          DateTime?
+  paidAt            DateTime?
+  expiresAt         DateTime?
+  attributedChannel PaymentChargeChannel?
+  version           Int                   @default(1)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  account        Account        @relation(fields: [accountId], references: [id])
+  contract       Contract       @relation(fields: [contractId], references: [id])
+  paymentGateway PaymentGateway @relation(fields: [paymentGatewayId], references: [id])
+  paymentEvents  PaymentEvent[]
+  paymentSettlements PaymentSettlement[]
+
+  @@unique([idempotencyKey, paymentGatewayId])
+  @@index([contractId, status])
+  @@index([status, expiresAt])
+  @@index([status, dueDate])
+  @@index([txid])
+}
+
+model PaymentEvent {
+  id              String   @id @default(uuid())
+  paymentChargeId String
+  fromStatus      String?
+  toStatus        String
+  source          String
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  paymentCharge PaymentCharge @relation(fields: [paymentChargeId], references: [id])
+
+  @@index([paymentChargeId, createdAt])
+}
+
+model PaymentSettlement {
+  id                 String                  @id @default(uuid())
+  accountId          String
+  contractId         String
+  paymentChargeId    String?
+  agreementReference String?
+  installmentNumber  Int?
+  source             PaymentSettlementSource
+  status             PaymentSettlementStatus @default(CONFIRMED)
+  amount             Decimal                 @db.Decimal(15, 2)
+  paidAt             DateTime
+  externalPaymentId  String
+  channelEventId     String?
+  debtReference      String?
+  metadata           Json?
+  providerPayload    Json?
+  createdAt          DateTime                @default(now())
+
+  account       Account        @relation(fields: [accountId], references: [id])
+  contract      Contract       @relation(fields: [contractId], references: [id])
+  paymentCharge PaymentCharge? @relation(fields: [paymentChargeId], references: [id])
+
+  @@unique([source, externalPaymentId])
+  @@index([contractId])
 }
 
 // ============ AUDIT ============

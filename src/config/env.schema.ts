@@ -37,6 +37,25 @@ export const envSchema = z.object({
   SERASA_WEBHOOK_SECRET: z.string().optional().default(''),
   SERASA_TIMEOUT: z.coerce.number().default(30000),
 
+  // Payment - Banco do Brasil
+  BB_CLIENT_ID: z.string().optional().default(''),
+  BB_CLIENT_SECRET: z.string().optional().default(''),
+  BB_DEVELOPER_KEY: z.string().optional().default(''),
+  BB_PIX_KEY: z.string().optional().default(''),
+  BB_CERTIFICATE_BASE64: z.string().optional().default(''),
+  BB_CERTIFICATE_PASSWORD: z.string().optional().default(''),
+  BB_WEBHOOK_ALLOWED_IPS: z.string().optional().default(''),
+
+  // Payment - Configuration
+  PIX_EXPIRATION_HOURS: z.coerce.number().optional().default(24),
+  CHARGE_LIFECYCLE_JOB_INTERVAL_MS: z.coerce.number().optional().default(300000),
+  CHARGE_LIFECYCLE_JOB_BATCH_SIZE: z.coerce.number().optional().default(50),
+  PAYMENT_PROVIDER_TIMEOUT_MS: z.coerce.number().optional().default(30000),
+  PAYMENT_PROVIDER_MAX_RETRIES: z.coerce.number().optional().default(3),
+  PAYMENT_GATEWAY_ENVIRONMENT: z
+    .enum(['SANDBOX', 'PRODUCTION'])
+    .default('SANDBOX'),
+
   // Seed
   SEED_ADMIN_EMAIL: z.string().email().default('admin@cobdata.local'),
   SEED_ADMIN_PASSWORD: z.string().min(8).default('Admin@123'),

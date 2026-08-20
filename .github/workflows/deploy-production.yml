@@ -1,0 +1,74 @@
+name: Deploy backend production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci && npm run build
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          BB_CLIENT_ID: ${{ secrets.BB_CLIENT_ID }}
+          BB_CLIENT_SECRET: ${{ secrets.BB_CLIENT_SECRET }}
+          BB_DEVELOPER_KEY: ${{ secrets.BB_DEVELOPER_KEY }}
+          BB_PIX_KEY: ${{ secrets.BB_PIX_KEY }}
+          BB_CERTIFICATE_BASE64: ${{ secrets.BB_CERTIFICATE_BASE64 }}
+          BB_CERTIFICATE_PASSWORD: ${{ secrets.BB_CERTIFICATE_PASSWORD }}
+        run: |
+          test -n "$DATABASE_URL" && test -n "$JWT_SECRET" && test -n "$REDIS_PASSWORD" && test -n "$S3_ACCESS_KEY" && test -n "$S3_SECRET_KEY" && test -n "$SEED_ADMIN_EMAIL" && test -n "$SEED_ADMIN_PASSWORD"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          cat > .env.production <<EOF
+          NODE_ENV=production
+          PORT=3000
+          CORS_ORIGIN=https://crm.maisqpago.com.br
+          DATABASE_URL=$DATABASE_URL
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_PASSWORD=$REDIS_PASSWORD
+          JWT_SECRET=$JWT_SECRET
+          S3_ENDPOINT=minio
+          S3_PORT=9000
+          S3_ACCESS_KEY=$S3_ACCESS_KEY
+          S3_SECRET_KEY=$S3_SECRET_KEY
+          S3_BUCKET=cobcom-crm-imports
+          S3_USE_SSL=false
+          PAYMENT_GATEWAY_ENVIRONMENT=PRODUCTION
+          SEED_ADMIN_EMAIL=$SEED_ADMIN_EMAIL
+          SEED_ADMIN_PASSWORD=$SEED_ADMIN_PASSWORD
+          BB_CLIENT_ID=$BB_CLIENT_ID
+          BB_CLIENT_SECRET=$BB_CLIENT_SECRET
+          BB_DEVELOPER_KEY=$BB_DEVELOPER_KEY
+          BB_PIX_KEY=$BB_PIX_KEY
+          BB_CERTIFICATE_BASE64=$BB_CERTIFICATE_BASE64
+          BB_CERTIFICATE_PASSWORD=$BB_CERTIFICATE_PASSWORD
+          EOF
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" 'mkdir -p /home/ec2-user/cobcom-crm/backend'
+          rsync -az --delete --exclude .git --exclude node_modules --exclude dist --exclude .env.production -e 'ssh -i ~/.ssh/deploy_key' ./ "$DEPLOY_USER@$DEPLOY_HOST:/home/ec2-user/cobcom-crm/backend/"
+          scp -i ~/.ssh/deploy_key .env.production "$DEPLOY_USER@$DEPLOY_HOST:/home/ec2-user/cobcom-crm/backend/.env.production"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" 'cd /home/ec2-user/cobcom-crm/backend && docker compose -f docker-compose.production.yml up -d --build --remove-orphans'
