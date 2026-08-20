@@ -22,7 +22,8 @@ export class PublicDebtRateLimitService {
 
   async consume(action: 'lookup' | 'pix', ip: string, document: string): Promise<void> {
     const keyPart = createHash('sha256').update(`${ip}:${document.replace(/\D/g, '')}`).digest('hex');
-    const key = `public-debts:${action}:${keyPart}`;
+    // Versioned key: releases old counters when rate-limit rules change.
+    const key = `public-debts:v2:${action}:${keyPart}`;
     const count = await this.redis.incr(key);
     if (count === 1) await this.redis.expire(key, this.windowSeconds);
     const max = action === 'lookup' ? this.maxLookups : this.maxPixRequests;

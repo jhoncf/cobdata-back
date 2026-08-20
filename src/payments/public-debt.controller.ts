@@ -38,9 +38,7 @@ export class PublicDebtController {
   async chargeStatus(
     @Param('chargeId') chargeId: string,
     @Query() dto: PublicDebtLookupDto,
-    @Req() req: Request,
   ) {
-    await this.rateLimit.consume('lookup', req.ip ?? req.socket.remoteAddress ?? 'unknown', dto.debtorDocument);
     return this.debts.getChargeStatus(chargeId, dto.debtorDocument);
   }
 }
