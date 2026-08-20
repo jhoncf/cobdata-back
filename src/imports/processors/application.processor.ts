@@ -29,6 +29,19 @@ function valuesAreDifferent(
     originalValue: Decimal;
     updatedValue: Decimal | null;
     debtOrigin: string | null;
+    debtorName: string;
+    dueDate: Date | null;
+    productName: string | null;
+    debtorStreet: string | null;
+    debtorAddressNumber: string | null;
+    debtorAddressComplement: string | null;
+    debtorNeighborhood: string | null;
+    debtorCity: string | null;
+    debtorState: string | null;
+    debtorZipCode: string | null;
+    debtorPhone: string | null;
+    debtorEmail: string | null;
+    cancelledAt: Date | null;
   },
   incoming: {
     debtType: string;
@@ -36,6 +49,19 @@ function valuesAreDifferent(
     originalValue: number;
     updatedValue: number | null;
     debtOrigin: string | null;
+    debtorName: string;
+    dueDate: Date | null;
+    productName: string | null;
+    debtorStreet: string | null;
+    debtorAddressNumber: string | null;
+    debtorAddressComplement: string | null;
+    debtorNeighborhood: string | null;
+    debtorCity: string | null;
+    debtorState: string | null;
+    debtorZipCode: string | null;
+    debtorPhone: string | null;
+    debtorEmail: string | null;
+    cancelledAt: Date | null;
   },
 ): boolean {
   if (existing.debtType !== incoming.debtType) return true;
@@ -50,6 +76,18 @@ function valuesAreDifferent(
   if (existingUpdated !== incoming.updatedValue) return true;
 
   if ((existing.debtOrigin || null) !== (incoming.debtOrigin || null)) return true;
+
+  const sameDate = (left: Date | null, right: Date | null) =>
+    (left?.toISOString().split('T')[0] ?? null) === (right?.toISOString().split('T')[0] ?? null);
+  if (!sameDate(existing.dueDate, incoming.dueDate) || !sameDate(existing.cancelledAt, incoming.cancelledAt)) return true;
+
+  for (const field of [
+    'debtorName', 'productName', 'debtorStreet', 'debtorAddressNumber',
+    'debtorAddressComplement', 'debtorNeighborhood', 'debtorCity', 'debtorState',
+    'debtorZipCode', 'debtorPhone', 'debtorEmail',
+  ] as const) {
+    if ((existing[field] || null) !== (incoming[field] || null)) return true;
+  }
 
   return false;
 }
@@ -143,10 +181,25 @@ export class ApplicationProcessor extends WorkerHost {
               contractNumber,
               debtOriginDocument: debtOrigin || undefined,
             });
+          const debtorDocumentHash =
+            this.deduplicationService.sha256(debtorDoc);
+          const debtOriginDocHash = debtOrigin
+            ? this.deduplicationService.sha256(debtOrigin)
+            : null;
 
-          // Check for existing contract
-          const existingContract = await tx.contract.findUnique({
-            where: { deduplicationKey },
+          // CPF/CNPJ + contract number + due date identify the same contract.
+          // The selected wallet is intentionally not part of this identity: a
+          // newer import is allowed to move the contract to another wallet.
+          const existingContract = dueDate
+            ? await tx.contract.findFirst({
+            where: {
+              accountId,
+              debtorDocumentHash,
+              contractNumber,
+              dueDate,
+              deletedAt: null,
+            },
+            orderBy: { updatedAt: 'desc' },
             select: {
               id: true,
               walletId: true,
@@ -155,16 +208,35 @@ export class ApplicationProcessor extends WorkerHost {
               originalValue: true,
               updatedValue: true,
               debtOrigin: true,
+              debtorName: true,
+              dueDate: true,
+              productName: true,
+              debtorStreet: true,
+              debtorAddressNumber: true,
+              debtorAddressComplement: true,
+              debtorNeighborhood: true,
+              debtorCity: true,
+              debtorState: true,
+              debtorZipCode: true,
+              debtorPhone: true,
+              debtorEmail: true,
+              cancelledAt: true,
               status: true,
               deletedAt: true,
             },
-          });
-
-          const debtorDocumentHash =
-            this.deduplicationService.sha256(debtorDoc);
-          const debtOriginDocHash = debtOrigin
-            ? this.deduplicationService.sha256(debtOrigin)
-            : null;
+          })
+            : await tx.contract.findUnique({
+              where: { deduplicationKey },
+              select: {
+                id: true, walletId: true, debtType: true, occurrenceDate: true,
+                originalValue: true, updatedValue: true, debtOrigin: true,
+                debtorName: true, dueDate: true, productName: true, debtorStreet: true,
+                debtorAddressNumber: true, debtorAddressComplement: true,
+                debtorNeighborhood: true, debtorCity: true, debtorState: true,
+                debtorZipCode: true, debtorPhone: true, debtorEmail: true,
+                cancelledAt: true, status: true, deletedAt: true,
+              },
+            });
 
           if (!existingContract || existingContract.deletedAt) {
             // CREATE: no existing match
@@ -208,6 +280,19 @@ export class ApplicationProcessor extends WorkerHost {
               originalValue,
               updatedValue,
               debtOrigin,
+              debtorName,
+              dueDate,
+              productName,
+              debtorStreet,
+              debtorAddressNumber,
+              debtorAddressComplement,
+              debtorNeighborhood,
+              debtorCity,
+              debtorState,
+              debtorZipCode,
+              debtorPhone,
+              debtorEmail,
+              cancelledAt,
             };
 
             if (
@@ -217,13 +302,27 @@ export class ApplicationProcessor extends WorkerHost {
                   occurrenceDate: existingContract.occurrenceDate,
                   originalValue: existingContract.originalValue,
                   updatedValue: existingContract.updatedValue,
-                  debtOrigin: existingContract.debtOrigin,
-                },
-                incoming,
+                debtOrigin: existingContract.debtOrigin,
+                debtorName: existingContract.debtorName,
+                dueDate: existingContract.dueDate,
+                productName: existingContract.productName,
+                debtorStreet: existingContract.debtorStreet,
+                debtorAddressNumber: existingContract.debtorAddressNumber,
+                debtorAddressComplement: existingContract.debtorAddressComplement,
+                debtorNeighborhood: existingContract.debtorNeighborhood,
+                debtorCity: existingContract.debtorCity,
+                debtorState: existingContract.debtorState,
+                debtorZipCode: existingContract.debtorZipCode,
+                debtorPhone: existingContract.debtorPhone,
+                debtorEmail: existingContract.debtorEmail,
+                cancelledAt: existingContract.cancelledAt,
+              },
+              incoming,
               )
             ) {
               // UPDATE: match with different values
               const updateData: any = {
+                walletId,
                 debtorDocument: debtorDoc,
                 debtorDocumentHash,
                 debtorName,
@@ -235,6 +334,7 @@ export class ApplicationProcessor extends WorkerHost {
                 updatedValue,
                 debtOrigin,
                 debtOriginDocHash,
+                deduplicationKey,
                 productName,
                 debtorStreet,
                 debtorAddressNumber,
@@ -278,8 +378,35 @@ export class ApplicationProcessor extends WorkerHost {
               }
             }
           } else {
-            // Different wallet — skip (already validated and excluded during validation phase)
-            ignoredCount++;
+            // Same identity in another wallet: the latest file is authoritative.
+            const updateData: any = {
+              walletId,
+              debtorDocument: debtorDoc,
+              debtorDocumentHash,
+              debtorName,
+              contractNumber,
+              debtType: debtType as any,
+              occurrenceDate,
+              dueDate,
+              originalValue,
+              updatedValue,
+              debtOrigin,
+              debtOriginDocHash,
+              productName,
+              debtorStreet,
+              debtorAddressNumber,
+              debtorAddressComplement,
+              debtorNeighborhood,
+              debtorCity,
+              debtorState,
+              debtorZipCode,
+              debtorPhone,
+              debtorEmail,
+              cancelledAt,
+              deduplicationKey,
+            };
+            await tx.contract.update({ where: { id: existingContract.id }, data: updateData });
+            updatedCount++;
           }
         }
       }, {

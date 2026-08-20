@@ -331,45 +331,6 @@ export class ValidationProcessor extends WorkerHost {
       return errors;
     }
 
-    // Check deduplication conflicts
-    const deduplicationKey = this.deduplicationService.computeDeduplicationKey({
-      creditorId,
-      debtorDocument: doc,
-      contractNumber,
-      debtOriginDocument: line['debtOrigin'] || undefined,
-    });
-
-    const existingContract = await this.prisma.contract.findUnique({
-      where: { deduplicationKey },
-      select: { id: true, walletId: true, providerStatus: true, deletedAt: true },
-    });
-
-    if (existingContract && !existingContract.deletedAt) {
-      // Check WALLET_MISMATCH
-      if (existingContract.walletId !== batchWalletId) {
-        errors.push({
-          lineNumber,
-          errorCode: 'WALLET_MISMATCH',
-          fieldName: 'walletId',
-          message: 'Contrato já existe em outra wallet',
-          fieldValue: existingContract.walletId,
-        });
-      }
-      // Check PROVIDER_CONFLICT
-      else {
-        const nonConflictStatuses = ['PENDING', 'FAILED', 'REMOVED'];
-        if (!nonConflictStatuses.includes(existingContract.providerStatus)) {
-          errors.push({
-            lineNumber,
-            errorCode: 'PROVIDER_CONFLICT',
-            fieldName: 'providerStatus',
-            message: `Contrato existente possui providerStatus '${existingContract.providerStatus}' incompatível com importação`,
-            fieldValue: existingContract.providerStatus,
-          });
-        }
-      }
-    }
-
     return errors;
   }
 
