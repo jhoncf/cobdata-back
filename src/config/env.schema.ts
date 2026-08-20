@@ -50,6 +50,7 @@ export const envSchema = z.object({
   BB_CERTIFICATE_BASE64: z.string().optional().default(''),
   BB_CERTIFICATE_PASSWORD: z.string().optional().default(''),
   BB_WEBHOOK_ALLOWED_IPS: z.string().optional().default(''),
+  BB_WEBHOOK_TOKEN: z.string().min(32).optional(),
 
   // Payment - Configuration
   PIX_EXPIRATION_HOURS: z.coerce.number().optional().default(24),

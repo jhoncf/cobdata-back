@@ -14,10 +14,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../providers/crypto.service';
 import { ConfigService } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module';
+import { BbPixWebhookController } from './webhooks/bb-pix-webhook.controller';
+import { BbPixWebhookService } from './webhooks/bb-pix-webhook.service';
+import { BbWebhookAuthGuard } from './webhooks/bb-webhook-auth.guard';
+import { BbWebhookRegistrationService } from './webhooks/bb-webhook-registration.service';
 
 @Module({
   imports: [AuditModule, ScheduleModule.forRoot()],
-  controllers: [PaymentGatewaysController, PaymentChargesController],
+  controllers: [PaymentGatewaysController, PaymentChargesController, BbPixWebhookController],
   providers: [
     PaymentGatewaysService,
     PaymentChargesService,
@@ -29,6 +33,9 @@ import { AuditModule } from '../audit/audit.module';
     BancoDoBrasilPaymentAdapter,
     BancoDoBrasilHttpClient,
     BancoDoBrasilAuthService,
+    BbPixWebhookService,
+    BbWebhookAuthGuard,
+    BbWebhookRegistrationService,
     {
       provide: PAYMENT_ADAPTERS_TOKEN,
       useFactory: (bbAdapter: BancoDoBrasilPaymentAdapter) => [bbAdapter],

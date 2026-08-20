@@ -21,6 +21,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../common/interfaces';
+import { BbWebhookRegistrationService } from './webhooks/bb-webhook-registration.service';
 
 @ApiTags('Payment Gateways')
 @ApiBearerAuth('bearer')
@@ -28,6 +29,7 @@ import { AuthenticatedUser } from '../common/interfaces';
 export class PaymentGatewaysController {
   constructor(
     private readonly paymentGatewaysService: PaymentGatewaysService,
+    private readonly bbWebhookRegistrationService: BbWebhookRegistrationService,
   ) {}
 
   @Get()
@@ -97,5 +99,17 @@ export class PaymentGatewaysController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<PaymentGatewayResponseDto> {
     return this.paymentGatewaysService.update(id, user.accountId, dto);
+  }
+
+  @Post(':id/bb-pix-webhook')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @Audit({ action: 'BB_PIX_WEBHOOK_REGISTERED', resourceType: 'PaymentGateway' })
+  @ApiOperation({ summary: 'Register Banco do Brasil Pix webhook' })
+  async registerBancoDoBrasilWebhook(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{ webhookUrl: string }> {
+    return this.bbWebhookRegistrationService.register(id, user.accountId);
   }
 }

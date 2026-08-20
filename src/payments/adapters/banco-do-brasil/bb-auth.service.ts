@@ -44,7 +44,7 @@ export const PIX_API_BASE_URLS: Record<PaymentGatewayEnvironment, string> = {
 /**
  * OAuth2 scope for Pix Cob API.
  */
-const OAUTH_SCOPE = 'cob.read cob.write';
+const OAUTH_SCOPE = 'cob.read cob.write webhook.read webhook.write';
 
 /**
  * Refresh tokens 60 seconds before actual expiry to avoid

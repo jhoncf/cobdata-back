@@ -41,8 +41,9 @@ jobs:
           BB_PIX_KEY: ${{ secrets.BB_PIX_KEY }}
           BB_CERTIFICATE_BASE64: ${{ secrets.BB_CERTIFICATE_BASE64 }}
           BB_CERTIFICATE_PASSWORD: ${{ secrets.BB_CERTIFICATE_PASSWORD }}
+          BB_WEBHOOK_TOKEN: ${{ secrets.BB_WEBHOOK_TOKEN }}
         run: |
-          test -n "$DATABASE_URL" && test -n "$JWT_SECRET" && test -n "$REDIS_PASSWORD" && test -n "$S3_ACCESS_KEY" && test -n "$S3_SECRET_KEY" && test -n "$SEED_ADMIN_EMAIL" && test -n "$SEED_ADMIN_PASSWORD" && test -n "$AWS_ACCESS_KEY_ID" && test -n "$AWS_SECRET_ACCESS_KEY" && test -n "$SES_REGION" && test -n "$SES_FROM_EMAIL"
+          test -n "$DATABASE_URL" && test -n "$JWT_SECRET" && test -n "$REDIS_PASSWORD" && test -n "$S3_ACCESS_KEY" && test -n "$S3_SECRET_KEY" && test -n "$SEED_ADMIN_EMAIL" && test -n "$SEED_ADMIN_PASSWORD" && test -n "$AWS_ACCESS_KEY_ID" && test -n "$AWS_SECRET_ACCESS_KEY" && test -n "$SES_REGION" && test -n "$SES_FROM_EMAIL" && test -n "$BB_WEBHOOK_TOKEN"
           install -d -m 700 ~/.ssh
           printf '%s' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
@@ -76,6 +77,7 @@ jobs:
           BB_PIX_KEY=$BB_PIX_KEY
           BB_CERTIFICATE_BASE64=$BB_CERTIFICATE_BASE64
           BB_CERTIFICATE_PASSWORD=$BB_CERTIFICATE_PASSWORD
+          BB_WEBHOOK_TOKEN=$BB_WEBHOOK_TOKEN
           EOF
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" 'mkdir -p /home/ec2-user/cobcom-crm/backend'
           rsync -az --delete --exclude .git --exclude node_modules --exclude dist --exclude .env.production -e 'ssh -i ~/.ssh/deploy_key' ./ "$DEPLOY_USER@$DEPLOY_HOST:/home/ec2-user/cobcom-crm/backend/"

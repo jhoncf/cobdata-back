@@ -5,6 +5,7 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 import { Request } from 'express';
 
 /**
@@ -16,6 +17,7 @@ import { Request } from 'express';
 export class BbWebhookAuthGuard implements CanActivate {
   private readonly logger = new Logger(BbWebhookAuthGuard.name);
   private readonly allowedIps: string[];
+  private readonly token?: string;
 
   constructor() {
     const raw = process.env.BB_WEBHOOK_ALLOWED_IPS ?? '';
@@ -23,22 +25,29 @@ export class BbWebhookAuthGuard implements CanActivate {
       .split(',')
       .map((ip) => ip.trim())
       .filter((ip) => ip.length > 0);
+    this.token = process.env.BB_WEBHOOK_TOKEN;
   }
 
   canActivate(context: ExecutionContext): boolean {
-    // If no IPs configured, skip validation (dev mode)
-    if (this.allowedIps.length === 0) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest<Request>();
     const sourceIp = this.extractSourceIp(request);
 
-    if (!sourceIp || !this.allowedIps.includes(sourceIp)) {
+    if (this.allowedIps.length > 0 && (!sourceIp || !this.allowedIps.includes(sourceIp))) {
       this.logger.warn(
         `BB webhook rejected: unauthorized IP ${sourceIp ?? 'unknown'} at ${new Date().toISOString()}`,
       );
       throw new UnauthorizedException();
+    }
+
+    // The BB webhook URL is registered with an unguessable token. In production
+    // the route must never be accepted without it, even when an IP allowlist is
+    // temporarily unavailable.
+    if (process.env.NODE_ENV === 'production') {
+      const supplied = this.extractToken(request);
+      if (!this.token || !supplied || !this.hasValidToken(supplied)) {
+        this.logger.warn(`BB webhook rejected: invalid token from ${sourceIp ?? 'unknown'}`);
+        throw new UnauthorizedException();
+      }
     }
 
     return true;
@@ -58,5 +67,15 @@ export class BbWebhookAuthGuard implements CanActivate {
       return forwarded[0].split(',')[0]?.trim();
     }
     return request.ip ?? undefined;
+  }
+
+  private extractToken(request: Request): string | undefined {
+    const token = request.query.token;
+    return typeof token === 'string' ? token : undefined;
+  }
+
+  private hasValidToken(supplied: string): boolean {
+    if (!this.token || supplied.length !== this.token.length) return false;
+    return timingSafeEqual(Buffer.from(supplied), Buffer.from(this.token));
   }
 }
