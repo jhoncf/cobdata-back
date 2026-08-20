@@ -122,7 +122,10 @@ export class SearchService {
     const whereClause: any = {
       accountId,
       deletedAt: null,
-      debtorDocumentHash: hash,
+      OR: [
+        { debtorDocumentHash: hash },
+        { debtorDocument: digitsOnly },
+      ],
     };
 
     // Scope filtering: only return contracts from wallets in scope

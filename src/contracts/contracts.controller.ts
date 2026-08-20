@@ -60,6 +60,21 @@ export class ContractsController {
     return this.contractsService.list(query, user.accountId, user.role, userScopes);
   }
 
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get a contract by ID', description: 'Retrieve a single contract with wallet and creditor data' })
+  @ApiResponse({ status: 200, description: 'Contract found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Contract not found' })
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: any,
+  ) {
+    const userScopes: string[] | undefined = req.userScopes;
+    return this.contractsService.findById(id, user.accountId, user.role, userScopes);
+  }
+
   @Patch(':id')
   @Roles('ADMIN', 'OPERATIONAL')
   @HttpCode(HttpStatus.OK)

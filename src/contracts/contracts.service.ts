@@ -191,6 +191,52 @@ export class ContractsService {
   }
 
   /**
+   * Find a single contract by ID with wallet and creditor relations.
+   */
+  async findById(
+    id: string,
+    accountId: string,
+    userRole: string,
+    userScopes?: string[],
+  ) {
+    const where: any = { id, accountId, deletedAt: null };
+
+    // VIEWER scope filtering
+    if (userRole === 'VIEWER' && userScopes && userScopes.length > 0) {
+      where.walletId = { in: userScopes };
+    }
+
+    const contract = await this.prisma.contract.findFirst({
+      where,
+      include: {
+        wallet: {
+          include: {
+            creditor: { select: { id: true, name: true, cnpj: true } },
+          },
+        },
+        tags: { select: { tag: true } },
+      },
+    });
+
+    if (!contract) {
+      throw new NotFoundException('Contract not found');
+    }
+
+    // Mask document for VIEWER
+    const { tags, ...rest } = contract;
+    const result: any = {
+      ...rest,
+      tags: tags.map((t) => t.tag),
+    };
+
+    if (userRole === 'VIEWER') {
+      result.debtorDocument = this.maskDocument(rest.debtorDocument);
+    }
+
+    return result;
+  }
+
+  /**
    * List contracts with pagination, filters, tag AND logic, and document masking for VIEWER.
    */
   async list(
