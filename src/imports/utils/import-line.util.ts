@@ -19,6 +19,10 @@ const HEADER_FIELD_MAP: Record<string, string> = {
   'rua': 'debtorStreet',
   'endereco': 'debtorStreet',
   'cidade': 'debtorCity',
+  'cep': 'debtorZipCode',
+  'uf': 'debtorState',
+  'estado': 'debtorState',
+  'bairro': 'debtorNeighborhood',
 };
 
 /**

@@ -124,7 +124,12 @@ export class ApplicationProcessor extends WorkerHost {
           const debtOrigin = line['debtOrigin'] || null;
           const productName = line['productName']?.trim() || null;
           const debtorStreet = line['debtorStreet']?.trim() || null;
+          const debtorAddressNumber = line['debtorAddressNumber']?.trim() || null;
+          const debtorAddressComplement = line['debtorAddressComplement']?.trim() || null;
+          const debtorNeighborhood = line['debtorNeighborhood']?.trim() || null;
           const debtorCity = line['debtorCity']?.trim() || null;
+          const debtorState = line['debtorState']?.trim() || null;
+          const debtorZipCode = line['debtorZipCode']?.trim() || null;
           const debtorPhone = line['debtorPhone']?.trim() || null;
           const debtorEmail = line['debtorEmail']?.trim() || null;
           const cancelledAtStr = line['cancelledAt'] || '';
@@ -180,7 +185,12 @@ export class ApplicationProcessor extends WorkerHost {
                 debtOriginDocHash,
                 productName,
                 debtorStreet,
+                debtorAddressNumber,
+                debtorAddressComplement,
+                debtorNeighborhood,
                 debtorCity,
+                debtorState,
+                debtorZipCode,
                 debtorPhone,
                 debtorEmail,
                 cancelledAt,
@@ -227,7 +237,12 @@ export class ApplicationProcessor extends WorkerHost {
                 debtOriginDocHash,
                 productName,
                 debtorStreet,
+                debtorAddressNumber,
+                debtorAddressComplement,
+                debtorNeighborhood,
                 debtorCity,
+                debtorState,
+                debtorZipCode,
                 debtorPhone,
                 debtorEmail,
                 cancelledAt,
