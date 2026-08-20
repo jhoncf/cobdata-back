@@ -404,5 +404,29 @@ describe('ValidationProcessor', () => {
 
       expect(lines).toEqual([{ debtorDocument: '12345678901', contractNumber: 'C001' }]);
     });
+
+    it('should infer the production portfolio export when no mapping is sent', async () => {
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        ['num_adm', 'nome_cliente', 'm_contrato', 'documento', 'valor_divida'],
+        ['C001', 'Ana Cliente', '20251101', '12345678901', '209.98'],
+      ]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'API');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      const lines = await processor.parseXlsxLines(buffer, {});
+
+      expect(lines).toEqual([
+        expect.objectContaining({
+          contractNumber: 'C001',
+          debtorName: 'Ana Cliente',
+          debtorDocument: '12345678901',
+          occurrenceDate: '2025-11-01',
+          originalValue: '209.98',
+          updatedValue: '209.98',
+          debtType: 'OTHER',
+        }),
+      ]);
+    });
   });
 });

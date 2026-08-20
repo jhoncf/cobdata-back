@@ -5,13 +5,30 @@ export interface ImportLineData {
 const HEADER_FIELD_MAP: Record<string, string> = {
   'num_adm': 'contractNumber',
   'cliente': 'debtorName',
+  'nome_cliente': 'debtorName',
   'documento': 'debtorDocument',
   'mes_contrato': 'occurrenceDate',
+  // Layout used by the production portfolio export.  Despite its name, the
+  // value is the contract/occurrence date in YYYYMMDD format.
+  'm_contrato': 'occurrenceDate',
   'vlr': 'originalValue',
+  'valor_divida': 'originalValue',
   'telefone': 'debtorPhone',
+  'telefone_cliente': 'debtorPhone',
   'email': 'debtorEmail',
   'rua': 'debtorStreet',
+  'endereco': 'debtorStreet',
   'cidade': 'debtorCity',
+};
+
+/**
+ * Some creditor exports contain a single current balance column.  It is both
+ * the imported face value and the value currently payable, so retain it in
+ * updatedValue as well.  This also makes the contract eligible for Pix
+ * issuance without a manual edit after import.
+ */
+const DUPLICATE_HEADER_FIELD_MAP: Record<string, string> = {
+  'valor_divida': 'updatedValue',
 };
 
 export function normalizeColumnMapping(
@@ -28,8 +45,14 @@ export function normalizeColumnMapping(
   }
 
   for (const header of headers) {
-    const targetField = HEADER_FIELD_MAP[header.trim().toLowerCase()];
+    const normalizedHeader = header.trim().toLowerCase();
+    const targetField = HEADER_FIELD_MAP[normalizedHeader];
     if (targetField && !normalized[targetField]) normalized[targetField] = header;
+
+    const duplicateTargetField = DUPLICATE_HEADER_FIELD_MAP[normalizedHeader];
+    if (duplicateTargetField && !normalized[duplicateTargetField]) {
+      normalized[duplicateTargetField] = header;
+    }
   }
 
   return normalized;
