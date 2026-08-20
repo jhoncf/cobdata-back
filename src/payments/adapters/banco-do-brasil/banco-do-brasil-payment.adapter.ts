@@ -258,27 +258,29 @@ export class BancoDoBrasilPaymentAdapter implements PaymentProviderAdapter {
     const cleanDocument = input.debtor.document.replace(/\D/g, '');
     const isCnpj = cleanDocument.length === 14;
 
-    const devedor: Record<string, string> = {
-      nome: input.debtor.name,
-    };
-
-    if (isCnpj) {
-      devedor.cnpj = cleanDocument;
-    } else {
-      devedor.cpf = cleanDocument;
-    }
-
-    return {
+    const payload: Record<string, unknown> = {
       calendario: {
         expiracao: expirationSeconds,
       },
-      devedor,
       valor: {
         original: this.formatAmount(input.amount),
       },
       chave: config.pixKey!,
       solicitacaoPagador: `Pagamento contrato CobCom`,
     };
+
+    // The payer is optional for an immediate Pix charge. Some portfolio
+    // imports legitimately contain only the debtor document; sending an empty
+    // name makes Banco do Brasil reject the whole request with HTTP 400.
+    const debtorName = input.debtor.name?.trim();
+    if (debtorName) {
+      payload.devedor = {
+        nome: debtorName,
+        ...(isCnpj ? { cnpj: cleanDocument } : { cpf: cleanDocument }),
+      };
+    }
+
+    return payload;
   }
 
   private calculateExpirationSeconds(expiresAt?: Date): number {
