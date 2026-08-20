@@ -99,7 +99,9 @@ export class ApplicationProcessor extends WorkerHost {
       const walletId = batch.walletId;
       const accountId = batch.accountId;
 
-      // Process each valid line in a transaction
+      // Keep the complete reconciliation atomic. Portfolio files can contain
+      // thousands of rows, which legitimately takes longer than Prisma's
+      // default 5-second interactive-transaction timeout.
       await this.prisma.$transaction(async (tx) => {
         for (const line of lines) {
           // Skip lines with missing required fields (these would have been marked invalid during validation)
@@ -265,6 +267,9 @@ export class ApplicationProcessor extends WorkerHost {
             ignoredCount++;
           }
         }
+      }, {
+        maxWait: 10_000,
+        timeout: 120_000,
       });
 
       // Update batch counters and set status to APPLIED
