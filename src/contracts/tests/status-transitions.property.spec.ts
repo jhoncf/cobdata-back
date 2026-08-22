@@ -68,7 +68,7 @@ describe('Property 12: Internal Status Transitions', () => {
             id: 'contract-id',
             accountId: mockAccountId,
             walletId: mockWalletId,
-            providerStatus: 'PENDING',
+            serasaStatus: 'PENDING',
             status: fromStatus,
             deletedAt: null,
           };
@@ -103,7 +103,7 @@ describe('Property 12: Internal Status Transitions', () => {
             id: 'contract-id',
             accountId: mockAccountId,
             walletId: mockWalletId,
-            providerStatus: 'PENDING',
+            serasaStatus: 'PENDING',
             status: fromStatus,
             deletedAt: null,
           };
@@ -134,7 +134,7 @@ describe('Property 12: Internal Status Transitions', () => {
             id: 'contract-id',
             accountId: mockAccountId,
             walletId: mockWalletId,
-            providerStatus: 'PENDING',
+            serasaStatus: 'PENDING',
             status,
             deletedAt: null,
           };

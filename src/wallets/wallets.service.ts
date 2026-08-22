@@ -13,7 +13,7 @@ import { Wallet } from '@prisma/client';
 
 export interface WalletSummary {
   totalContracts: number;
-  contractsByStatus: Record<string, number>;
+  contractsByPaymentStatus: Record<string, number>;
   totalValue: number;
 }
 
@@ -176,7 +176,7 @@ export class WalletsService {
   async getWalletSummary(walletId: string): Promise<WalletSummary> {
     const [statusCounts, valueAgg] = await Promise.all([
       this.prisma.contract.groupBy({
-        by: ['providerStatus'],
+        by: ['paymentStatus'],
         where: { walletId, deletedAt: null },
         _count: { _all: true },
       }),
@@ -187,14 +187,14 @@ export class WalletsService {
       }),
     ]);
 
-    const contractsByStatus: Record<string, number> = {};
+    const contractsByPaymentStatus: Record<string, number> = {};
     for (const group of statusCounts) {
-      contractsByStatus[group.providerStatus] = group._count._all;
+      contractsByPaymentStatus[group.paymentStatus] = group._count._all;
     }
 
     const totalContracts = valueAgg._count._all;
     const totalValue = Number(valueAgg._sum.originalValue || 0);
 
-    return { totalContracts, contractsByStatus, totalValue };
+    return { totalContracts, contractsByPaymentStatus, totalValue };
   }
 }

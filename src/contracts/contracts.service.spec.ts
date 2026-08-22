@@ -75,21 +75,21 @@ describe('ContractsService', () => {
         id: 'new-contract-id',
         ...baseDto,
         accountId: mockAccountId,
-        providerStatus: 'PENDING',
+        serasaStatus: 'PENDING',
         status: 'ACTIVE',
       };
       prisma.contract.create.mockResolvedValue(expectedContract);
 
       const result = await service.createOrUpdate(baseDto, mockAccountId);
 
-      expect(result.providerStatus).toBe('PENDING');
+      expect(result.serasaStatus).toBe('PENDING');
       expect(result.status).toBe('ACTIVE');
       expect(prisma.contract.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             accountId: mockAccountId,
             walletId: mockWalletId,
-            providerStatus: 'PENDING',
+            serasaStatus: 'PENDING',
             status: 'ACTIVE',
             debtorDocument: '12345678901',
             contractNumber: 'CTR-001',
@@ -301,12 +301,12 @@ describe('ContractsService', () => {
       id: 'contract-id',
       accountId: mockAccountId,
       walletId: mockWalletId,
-      providerStatus: 'PENDING',
+      serasaStatus: 'PENDING',
       status: 'ACTIVE',
       deletedAt: null,
     };
 
-    it('should update contract when providerStatus is PENDING', async () => {
+    it('should update contract when serasaStatus is PENDING', async () => {
       prisma.contract.findFirst.mockResolvedValue(mockContract);
       prisma.contract.update.mockResolvedValue({ ...mockContract, originalValue: 2000 });
 
@@ -319,10 +319,10 @@ describe('ContractsService', () => {
       });
     });
 
-    it('should update contract when providerStatus is FAILED', async () => {
+    it('should update contract when serasaStatus is FAILED', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'FAILED',
+        serasaStatus: 'FAILED',
       });
       prisma.contract.update.mockResolvedValue(mockContract);
 
@@ -332,10 +332,10 @@ describe('ContractsService', () => {
       ).resolves.toBeDefined();
     });
 
-    it('should update contract when providerStatus is REMOVED', async () => {
+    it('should update contract when serasaStatus is REMOVED', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'REMOVED',
+        serasaStatus: 'REMOVED',
       });
       prisma.contract.update.mockResolvedValue(mockContract);
 
@@ -345,10 +345,10 @@ describe('ContractsService', () => {
       ).resolves.toBeDefined();
     });
 
-    it('should throw 409 when providerStatus is REGISTERED', async () => {
+    it('should throw 409 when serasaStatus is REGISTERED', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'REGISTERED',
+        serasaStatus: 'REGISTERED',
       });
 
       const dto: UpdateContractDto = { originalValue: 2000 };
@@ -357,10 +357,10 @@ describe('ContractsService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should throw 409 when providerStatus is SENT', async () => {
+    it('should throw 409 when serasaStatus is SENT', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'SENT',
+        serasaStatus: 'SENT',
       });
 
       const dto: UpdateContractDto = { originalValue: 2000 };
@@ -369,10 +369,10 @@ describe('ContractsService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should throw 409 when providerStatus is REMOVING', async () => {
+    it('should throw 409 when serasaStatus is REMOVING', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'REMOVING',
+        serasaStatus: 'REMOVING',
       });
 
       const dto: UpdateContractDto = { originalValue: 2000 };
@@ -530,12 +530,12 @@ describe('ContractsService', () => {
       });
     });
 
-    it('should not update providerStatus even if passed in body', async () => {
+    it('should not update serasaStatus even if passed in body', async () => {
       prisma.contract.findFirst.mockResolvedValue(mockContract);
       prisma.contract.update.mockResolvedValue(mockContract);
 
-      // Force a providerStatus in the dto (simulating bad input)
-      const dto: any = { originalValue: 5000, providerStatus: 'REGISTERED' };
+      // Force a serasaStatus in the dto (simulating bad input)
+      const dto: any = { originalValue: 5000, serasaStatus: 'REGISTERED' };
       await service.update('contract-id', dto, mockAccountId);
 
       expect(prisma.contract.update).toHaveBeenCalledWith({
@@ -550,12 +550,12 @@ describe('ContractsService', () => {
       id: 'contract-id',
       accountId: mockAccountId,
       walletId: mockWalletId,
-      providerStatus: 'PENDING',
+      serasaStatus: 'PENDING',
       status: 'ACTIVE',
       deletedAt: null,
     };
 
-    it('should soft-delete when providerStatus is PENDING', async () => {
+    it('should soft-delete when serasaStatus is PENDING', async () => {
       prisma.contract.findFirst.mockResolvedValue(mockContract);
       prisma.contract.update.mockResolvedValue({
         ...mockContract,
@@ -571,10 +571,10 @@ describe('ContractsService', () => {
       expect(result.deletedAt).toBeDefined();
     });
 
-    it('should soft-delete when providerStatus is FAILED', async () => {
+    it('should soft-delete when serasaStatus is FAILED', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'FAILED',
+        serasaStatus: 'FAILED',
       });
       prisma.contract.update.mockResolvedValue({
         ...mockContract,
@@ -586,10 +586,10 @@ describe('ContractsService', () => {
       ).resolves.toBeDefined();
     });
 
-    it('should soft-delete when providerStatus is REMOVED', async () => {
+    it('should soft-delete when serasaStatus is REMOVED', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'REMOVED',
+        serasaStatus: 'REMOVED',
       });
       prisma.contract.update.mockResolvedValue({
         ...mockContract,
@@ -601,10 +601,10 @@ describe('ContractsService', () => {
       ).resolves.toBeDefined();
     });
 
-    it('should throw 409 when providerStatus is REGISTERED', async () => {
+    it('should throw 409 when serasaStatus is REGISTERED', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'REGISTERED',
+        serasaStatus: 'REGISTERED',
       });
 
       await expect(
@@ -612,10 +612,10 @@ describe('ContractsService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should throw 409 when providerStatus is SENT', async () => {
+    it('should throw 409 when serasaStatus is SENT', async () => {
       prisma.contract.findFirst.mockResolvedValue({
         ...mockContract,
-        providerStatus: 'SENT',
+        serasaStatus: 'SENT',
       });
 
       await expect(

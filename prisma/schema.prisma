@@ -42,7 +42,8 @@ enum DebtType {
   OTHER
 }
 
-enum ProviderStatus {
+enum SerasaStatus {
+  NOT_ENABLED
   PENDING
   SENT
   REGISTERED
@@ -50,6 +51,10 @@ enum ProviderStatus {
   FAILED
   REMOVING
   REMOVED
+}
+
+enum PaymentStatus {
+  OPEN
   IN_AGREEMENT
   AGREEMENT_BREACHED
   PAID
@@ -336,7 +341,8 @@ model Contract {
   cancelledAt        DateTime?
   offer              Json?
   deduplicationKey   String         @unique
-  providerStatus     ProviderStatus @default(PENDING)
+  serasaStatus       SerasaStatus @default(NOT_ENABLED)
+  paymentStatus      PaymentStatus @default(OPEN)
   status             ContractStatus @default(ACTIVE)
   debtId             String?
   paidInstallments   Int            @default(0)
@@ -354,7 +360,8 @@ model Contract {
   paymentSettlements PaymentSettlement[]
   ligueLeadDispatchItems LigueLeadDispatchItem[]
 
-  @@index([walletId, providerStatus])
+  @@index([walletId, serasaStatus])
+  @@index([walletId, paymentStatus])
   @@index([walletId, status, deletedAt])
   @@index([debtorDocumentHash])
 }

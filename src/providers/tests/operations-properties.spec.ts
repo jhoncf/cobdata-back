@@ -2,7 +2,7 @@ import * as fc from 'fast-check';
 import {
   OperationAction,
   ContractStatus,
-  ProviderStatus,
+  SerasaStatus,
 } from '@prisma/client';
 
 /**
@@ -107,7 +107,7 @@ describe('Property 20: Operation batching invariant', () => {
  * Only contracts with:
  * - status = ACTIVE
  * - deletedAt IS NULL
- * - providerStatus in eligible set for the action
+ * - serasaStatus in eligible set for the action
  * - For REMOVE: debtId is not null
  * should be selected.
  */
@@ -116,19 +116,19 @@ interface MockContract {
   id: string;
   walletId: string;
   status: ContractStatus;
-  providerStatus: ProviderStatus;
+  serasaStatus: SerasaStatus;
   deletedAt: Date | null;
   debtId: string | null;
 }
 
-const ELIGIBLE_FOR_CREATE: ProviderStatus[] = [
-  ProviderStatus.PENDING,
-  ProviderStatus.FAILED,
+const ELIGIBLE_FOR_CREATE: SerasaStatus[] = [
+  SerasaStatus.PENDING,
+  SerasaStatus.FAILED,
 ];
 
-const ELIGIBLE_FOR_REMOVE: ProviderStatus[] = [
-  ProviderStatus.REGISTERED,
-  ProviderStatus.UPDATED,
+const ELIGIBLE_FOR_REMOVE: SerasaStatus[] = [
+  SerasaStatus.REGISTERED,
+  SerasaStatus.UPDATED,
 ];
 
 /**
@@ -148,7 +148,7 @@ function filterEligibleContracts(
     if (c.walletId !== walletId) return false;
     if (c.status !== ContractStatus.ACTIVE) return false;
     if (c.deletedAt !== null) return false;
-    if (!eligibleStatuses.includes(c.providerStatus)) return false;
+    if (!eligibleStatuses.includes(c.serasaStatus)) return false;
     if (action === OperationAction.REMOVE && !c.debtId) return false;
     return true;
   });
@@ -160,17 +160,17 @@ const contractStatusArb = fc.constantFrom(
   ContractStatus.CANCELLED,
 );
 
-const providerStatusArb = fc.constantFrom(
-  ProviderStatus.PENDING,
-  ProviderStatus.SENT,
-  ProviderStatus.REGISTERED,
-  ProviderStatus.UPDATED,
-  ProviderStatus.FAILED,
-  ProviderStatus.REMOVING,
-  ProviderStatus.REMOVED,
-  ProviderStatus.IN_AGREEMENT,
-  ProviderStatus.AGREEMENT_BREACHED,
-  ProviderStatus.PAID,
+const serasaStatusArb = fc.constantFrom(
+  SerasaStatus.PENDING,
+  SerasaStatus.SENT,
+  SerasaStatus.REGISTERED,
+  SerasaStatus.UPDATED,
+  SerasaStatus.FAILED,
+  SerasaStatus.REMOVING,
+  SerasaStatus.REMOVED,
+  SerasaStatus.IN_AGREEMENT,
+  SerasaStatus.AGREEMENT_BREACHED,
+  SerasaStatus.PAID,
 );
 
 const mockContractArb = (walletId: string) =>
@@ -178,7 +178,7 @@ const mockContractArb = (walletId: string) =>
     id: fc.uuid(),
     walletId: fc.constantFrom(walletId, 'other-wallet-id'),
     status: contractStatusArb,
-    providerStatus: providerStatusArb,
+    serasaStatus: serasaStatusArb,
     deletedAt: fc.option(fc.date(), { nil: null }),
     debtId: fc.option(fc.uuid(), { nil: null }),
   });
@@ -191,7 +191,7 @@ const operationActionArb = fc.constantFrom(
 describe('Property 21: Eligible contracts selection', () => {
   const TARGET_WALLET = 'target-wallet-id';
 
-  it('should only select ACTIVE contracts with eligible providerStatus and no deletedAt', () => {
+  it('should only select ACTIVE contracts with eligible serasaStatus and no deletedAt', () => {
     fc.assert(
       fc.property(
         fc.array(mockContractArb(TARGET_WALLET), { minLength: 0, maxLength: 50 }),
@@ -209,13 +209,13 @@ describe('Property 21: Eligible contracts selection', () => {
             expect(c.deletedAt).toBeNull();
           }
 
-          // All selected must have eligible providerStatus
+          // All selected must have eligible serasaStatus
           const eligibleStatuses =
             action === OperationAction.CREATE_OR_UPDATE
               ? ELIGIBLE_FOR_CREATE
               : ELIGIBLE_FOR_REMOVE;
           for (const c of eligible) {
-            expect(eligibleStatuses).toContain(c.providerStatus);
+            expect(eligibleStatuses).toContain(c.serasaStatus);
           }
 
           // All selected must belong to the target wallet
@@ -255,7 +255,7 @@ describe('Property 21: Eligible contracts selection', () => {
               c.walletId === TARGET_WALLET &&
               c.status === ContractStatus.ACTIVE &&
               c.deletedAt === null &&
-              eligibleStatuses.includes(c.providerStatus) &&
+              eligibleStatuses.includes(c.serasaStatus) &&
               (action !== OperationAction.REMOVE || c.debtId !== null);
 
             if (shouldBeEligible) {
@@ -305,7 +305,7 @@ describe('Property 13: Suspended/cancelled excluded from operations', () => {
             id: fc.uuid(),
             walletId: fc.constant(TARGET_WALLET),
             status: fc.constantFrom(ContractStatus.SUSPENDED, ContractStatus.CANCELLED),
-            providerStatus: fc.constantFrom(ProviderStatus.PENDING, ProviderStatus.FAILED),
+            serasaStatus: fc.constantFrom(SerasaStatus.PENDING, SerasaStatus.FAILED),
             deletedAt: fc.constant(null),
             debtId: fc.option(fc.uuid(), { nil: null }),
           }),

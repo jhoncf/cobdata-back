@@ -169,8 +169,8 @@ describe('WalletsService', () => {
     it('should return wallet with summary', async () => {
       prisma.wallet.findFirst.mockResolvedValue(mockWallet);
       prisma.contract.groupBy.mockResolvedValue([
-        { providerStatus: 'PENDING', _count: { _all: 2 } },
-        { providerStatus: 'REGISTERED', _count: { _all: 1 } },
+        { serasaStatus: 'PENDING', _count: { _all: 2 } },
+        { serasaStatus: 'REGISTERED', _count: { _all: 1 } },
       ]);
       prisma.contract.aggregate.mockResolvedValue({
         _count: { _all: 3 },
@@ -280,9 +280,9 @@ describe('WalletsService', () => {
   describe('getWalletSummary', () => {
     it('should compute summary with contracts grouped by status', async () => {
       prisma.contract.groupBy.mockResolvedValue([
-        { providerStatus: 'PENDING', _count: { _all: 2 } },
-        { providerStatus: 'SENT', _count: { _all: 1 } },
-        { providerStatus: 'REGISTERED', _count: { _all: 1 } },
+        { serasaStatus: 'PENDING', _count: { _all: 2 } },
+        { serasaStatus: 'SENT', _count: { _all: 1 } },
+        { serasaStatus: 'REGISTERED', _count: { _all: 1 } },
       ]);
       prisma.contract.aggregate.mockResolvedValue({
         _count: { _all: 4 },

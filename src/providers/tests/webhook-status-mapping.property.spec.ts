@@ -4,14 +4,14 @@ import { ConfigService } from '@nestjs/config';
 import { WebhooksService, WebhookPayload } from '../webhooks.service';
 import { SerasaLnopAdapter } from '../adapters/serasa-lnop.adapter';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ProviderStatus, OperationItemStatus } from '@prisma/client';
+import { SerasaStatus, OperationItemStatus } from '@prisma/client';
 
 /**
  * Property 23: Webhook Event to Contract Status Mapping
  *
  * **Validates: Requirements 19.4, 19.5, 19.8, 19.10**
  *
- * For any valid webhook event, the contract providerStatus SHALL be updated as follows:
+ * For any valid webhook event, the contract serasaStatus SHALL be updated as follows:
  * DebtCreatedEvent(201)→REGISTERED, DebtCreatedEvent(204)→UPDATED,
  * DebtRemovedEvent(200)→REMOVED, ClosedAgreementEvent→IN_AGREEMENT,
  * BreachedAgreementEvent→AGREEMENT_BREACHED, PaidAgreementEvent→PAID.
@@ -30,52 +30,52 @@ describe('Property 23: Webhook Event to Contract Status Mapping', () => {
     debtId: null,
     contract: {
       id: 'contract-id',
-      providerStatus: 'SENT',
+      serasaStatus: 'SENT',
       debtId: null,
     },
   };
 
-  // Mapping: (eventType, httpStatus) → expected contract providerStatus
+  // Mapping: (eventType, httpStatus) → expected contract serasaStatus
   const STATUS_MAPPINGS: Array<{
     eventType: string;
     httpStatus: number | undefined;
-    expectedProviderStatus: ProviderStatus;
+    expectedSerasaStatus: SerasaStatus;
     expectedItemStatus: OperationItemStatus | null;
   }> = [
     {
       eventType: 'DebtCreatedEvent',
       httpStatus: 201,
-      expectedProviderStatus: ProviderStatus.REGISTERED,
+      expectedSerasaStatus: SerasaStatus.REGISTERED,
       expectedItemStatus: OperationItemStatus.REGISTERED,
     },
     {
       eventType: 'DebtCreatedEvent',
       httpStatus: 204,
-      expectedProviderStatus: ProviderStatus.UPDATED,
+      expectedSerasaStatus: SerasaStatus.UPDATED,
       expectedItemStatus: OperationItemStatus.UPDATED,
     },
     {
       eventType: 'DebtRemovedEvent',
       httpStatus: 200,
-      expectedProviderStatus: ProviderStatus.REMOVED,
+      expectedSerasaStatus: SerasaStatus.REMOVED,
       expectedItemStatus: OperationItemStatus.REMOVED,
     },
     {
       eventType: 'ClosedAgreementEvent',
       httpStatus: undefined,
-      expectedProviderStatus: ProviderStatus.IN_AGREEMENT,
+      expectedSerasaStatus: SerasaStatus.IN_AGREEMENT,
       expectedItemStatus: null,
     },
     {
       eventType: 'BreachedAgreementEvent',
       httpStatus: undefined,
-      expectedProviderStatus: ProviderStatus.AGREEMENT_BREACHED,
+      expectedSerasaStatus: SerasaStatus.AGREEMENT_BREACHED,
       expectedItemStatus: null,
     },
     {
       eventType: 'PaidAgreementEvent',
       httpStatus: undefined,
-      expectedProviderStatus: ProviderStatus.PAID,
+      expectedSerasaStatus: SerasaStatus.PAID,
       expectedItemStatus: null,
     },
   ];
@@ -102,7 +102,7 @@ describe('Property 23: Webhook Event to Contract Status Mapping', () => {
     service = module.get<WebhooksService>(WebhooksService);
   });
 
-  it('each event type maps to the correct contract providerStatus', async () => {
+  it('each event type maps to the correct contract serasaStatus', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.constantFrom(...STATUS_MAPPINGS),
@@ -143,7 +143,7 @@ describe('Property 23: Webhook Event to Contract Status Mapping', () => {
             expect(prisma.contract.update).toHaveBeenCalledWith(
               expect.objectContaining({
                 where: { id: item.contractId },
-                data: { providerStatus: mapping.expectedProviderStatus },
+                data: { serasaStatus: mapping.expectedSerasaStatus },
               }),
             );
           }

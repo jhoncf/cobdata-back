@@ -13,9 +13,9 @@ import { Contract, ContractStatus, Prisma } from '@prisma/client';
 import { PaginatedResponse } from '../common/dto/paginated-response.dto';
 
 /**
- * Allowed providerStatus values that permit editing/deleting a contract.
+ * Allowed serasaStatus values that permit editing/deleting a contract.
  */
-const EDITABLE_PROVIDER_STATUSES = ['PENDING', 'FAILED', 'REMOVED'];
+const EDITABLE_PROVIDER_STATUSES = ['NOT_ENABLED', 'PENDING', 'FAILED', 'REMOVED'];
 
 /**
  * Allowed internal status transitions.
@@ -157,7 +157,7 @@ export class ContractsService {
       );
     }
 
-    // 6c. If not exists → CREATE with providerStatus=PENDING, status=ACTIVE
+    // 6c. If not exists → CREATE outside Serasa by default, status=ACTIVE
     return this.prisma.contract.create({
       data: {
         accountId,
@@ -184,7 +184,8 @@ export class ContractsService {
           ? (dto.offer as unknown as Prisma.InputJsonValue)
           : Prisma.JsonNull,
         deduplicationKey,
-        providerStatus: 'PENDING',
+        serasaStatus: 'NOT_ENABLED',
+        paymentStatus: 'OPEN',
         status: 'ACTIVE',
       },
     });
@@ -245,7 +246,7 @@ export class ContractsService {
     userRole: string,
     userScopes?: string[],
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, providerStatus, dateFrom, dateTo, debtorDocument, tags } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, dateFrom, dateTo, debtorDocument, tags } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -283,8 +284,8 @@ export class ContractsService {
       where.status = status;
     }
 
-    if (providerStatus) {
-      where.providerStatus = providerStatus;
+    if (serasaStatus) {
+      where.serasaStatus = serasaStatus;
     }
 
     if (dateFrom || dateTo) {
@@ -348,7 +349,7 @@ export class ContractsService {
   }
 
   /**
-   * Update a contract with providerStatus and status transition guards.
+   * Update a contract with serasaStatus and status transition guards.
    */
   async update(
     id: string,
@@ -364,10 +365,10 @@ export class ContractsService {
       throw new NotFoundException('Contract not found');
     }
 
-    // 2. Check providerStatus guard
-    if (!EDITABLE_PROVIDER_STATUSES.includes(contract.providerStatus)) {
+    // 2. Check serasaStatus guard
+    if (!EDITABLE_PROVIDER_STATUSES.includes(contract.serasaStatus)) {
       throw new ConflictException(
-        'Contract must be removed from the provider before any changes. Current providerStatus does not allow editing.',
+        'Contract must be removed from the provider before any changes. Current serasaStatus does not allow editing.',
       );
     }
 
@@ -458,7 +459,7 @@ export class ContractsService {
       updateData.offer = dto.offer;
     }
 
-    // providerStatus is NEVER editable via PATCH — ignored if present in body
+    // serasaStatus is NEVER editable via PATCH — ignored if present in body
 
     return this.prisma.contract.update({
       where: { id },
@@ -467,7 +468,7 @@ export class ContractsService {
   }
 
   /**
-   * Soft-delete a contract if providerStatus allows it.
+   * Soft-delete a contract if serasaStatus allows it.
    */
   async softDelete(id: string, accountId: string): Promise<Contract> {
     const contract = await this.prisma.contract.findFirst({
@@ -478,9 +479,9 @@ export class ContractsService {
       throw new NotFoundException('Contract not found');
     }
 
-    if (!EDITABLE_PROVIDER_STATUSES.includes(contract.providerStatus)) {
+    if (!EDITABLE_PROVIDER_STATUSES.includes(contract.serasaStatus)) {
       throw new ConflictException(
-        'Contract must be removed from the provider before deletion. Current providerStatus does not allow deletion.',
+        'Contract must be removed from the provider before deletion. Current serasaStatus does not allow deletion.',
       );
     }
 

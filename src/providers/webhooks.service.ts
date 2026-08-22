@@ -5,7 +5,8 @@ import { SerasaLnopAdapter } from './adapters/serasa-lnop.adapter';
 import {
   WebhookStatus,
   OperationItemStatus,
-  ProviderStatus,
+  SerasaStatus,
+  PaymentStatus,
   ProviderType,
 } from '@prisma/client';
 
@@ -185,7 +186,7 @@ export class WebhooksService {
         this.prisma.contract.update({
           where: { id: operationItem.contractId },
           data: {
-            providerStatus: ProviderStatus.REGISTERED,
+            serasaStatus: SerasaStatus.REGISTERED,
             debtId: payload.debtId || operationItem.contract?.debtId,
           },
         }),
@@ -202,7 +203,7 @@ export class WebhooksService {
         this.prisma.contract.update({
           where: { id: operationItem.contractId },
           data: {
-            providerStatus: ProviderStatus.UPDATED,
+            serasaStatus: SerasaStatus.UPDATED,
             debtId: payload.debtId || operationItem.contract?.debtId,
           },
         }),
@@ -221,7 +222,7 @@ export class WebhooksService {
 
       await this.prisma.contract.update({
         where: { id: operationItem.contractId },
-        data: { providerStatus: ProviderStatus.FAILED },
+        data: { serasaStatus: SerasaStatus.FAILED },
       });
     }
   }
@@ -245,7 +246,7 @@ export class WebhooksService {
         }),
         this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { providerStatus: ProviderStatus.REMOVED },
+          data: { serasaStatus: SerasaStatus.REMOVED },
         }),
       ]);
     } else {
@@ -259,7 +260,7 @@ export class WebhooksService {
             payload.errorMessage || `Provider returned status ${httpStatus}`,
         },
       });
-      // Contract providerStatus stays as REMOVING (no update needed)
+      // Contract serasaStatus stays as REMOVING (no update needed)
     }
   }
 
@@ -279,21 +280,21 @@ export class WebhooksService {
       case 'ClosedAgreementEvent':
         await this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { providerStatus: ProviderStatus.IN_AGREEMENT },
+          data: { paymentStatus: PaymentStatus.IN_AGREEMENT },
         });
         break;
 
       case 'BreachedAgreementEvent':
         await this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { providerStatus: ProviderStatus.AGREEMENT_BREACHED },
+          data: { paymentStatus: PaymentStatus.AGREEMENT_BREACHED },
         });
         break;
 
       case 'PaidAgreementEvent':
         await this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { providerStatus: ProviderStatus.PAID },
+          data: { paymentStatus: PaymentStatus.PAID },
         });
         break;
 

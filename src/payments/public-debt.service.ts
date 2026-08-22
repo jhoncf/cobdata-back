@@ -23,7 +23,7 @@ export class PublicDebtService {
       where: {
         debtorDocument,
         status: 'ACTIVE',
-        providerStatus: { not: 'PAID' },
+        paymentStatus: { not: 'PAID' },
         deletedAt: null,
         updatedValue: { gt: 0 },
         wallet: { status: 'ACTIVE', deletedAt: null },
@@ -54,7 +54,7 @@ export class PublicDebtService {
         id: contractId,
         debtorDocument,
         status: 'ACTIVE',
-        providerStatus: { not: 'PAID' },
+        paymentStatus: { not: 'PAID' },
         deletedAt: null,
         updatedValue: { gt: 0 },
         wallet: { status: 'ACTIVE', deletedAt: null },

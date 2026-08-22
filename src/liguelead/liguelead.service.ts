@@ -54,7 +54,7 @@ export class LigueLeadService {
   }
 
   private async eligibleContracts(walletId: string, accountId: string, ids: string[]) {
-    const contracts = await this.prisma.contract.findMany({ where: { id: { in: ids }, walletId, accountId, deletedAt: null, providerStatus: { not: 'PAID' }, status: 'ACTIVE', debtorPhone: { not: null } }, select: { id: true, contractNumber: true, debtorName: true, debtorDocument: true, debtorPhone: true, originalValue: true, updatedValue: true } });
+    const contracts = await this.prisma.contract.findMany({ where: { id: { in: ids }, walletId, accountId, deletedAt: null, paymentStatus: { not: 'PAID' }, status: 'ACTIVE', debtorPhone: { not: null } }, select: { id: true, contractNumber: true, debtorName: true, debtorDocument: true, debtorPhone: true, originalValue: true, updatedValue: true } });
     if (contracts.length !== ids.length) throw new BadRequestException('Selecione apenas contratos ativos, não pagos e com telefone informado');
     return contracts;
   }

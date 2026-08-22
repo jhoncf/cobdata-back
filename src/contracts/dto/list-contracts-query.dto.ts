@@ -7,7 +7,7 @@ import {
   IsArray,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ContractStatus, ProviderStatus } from '@prisma/client';
+import { ContractStatus, SerasaStatus } from '@prisma/client';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
 export class ListContractsQueryDto extends PaginationDto {
@@ -24,8 +24,8 @@ export class ListContractsQueryDto extends PaginationDto {
   status?: ContractStatus;
 
   @IsOptional()
-  @IsEnum(ProviderStatus)
-  providerStatus?: ProviderStatus;
+  @IsEnum(SerasaStatus)
+  serasaStatus?: SerasaStatus;
 
   @IsOptional()
   @IsDateString()

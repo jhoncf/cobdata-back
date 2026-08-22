@@ -267,7 +267,8 @@ export class ApplicationProcessor extends WorkerHost {
                 debtorEmail,
                 cancelledAt,
                 deduplicationKey,
-                providerStatus: 'PENDING',
+                serasaStatus: 'NOT_ENABLED',
+                paymentStatus: 'OPEN',
                 status: 'ACTIVE',
               },
             });

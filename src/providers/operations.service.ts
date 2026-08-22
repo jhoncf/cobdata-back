@@ -14,21 +14,22 @@ import {
   OperationStatus,
   OperationItemStatus,
   ContractStatus,
-  ProviderStatus,
+  SerasaStatus,
 } from '@prisma/client';
 
 const BATCH_SIZE = 1000;
 
-/** ProviderStatus values eligible for CREATE_OR_UPDATE operations */
-const ELIGIBLE_FOR_CREATE: ProviderStatus[] = [
-  ProviderStatus.PENDING,
-  ProviderStatus.FAILED,
+/** SerasaStatus values eligible for CREATE_OR_UPDATE operations */
+const ELIGIBLE_FOR_CREATE: SerasaStatus[] = [
+  SerasaStatus.NOT_ENABLED,
+  SerasaStatus.PENDING,
+  SerasaStatus.FAILED,
 ];
 
-/** ProviderStatus values eligible for REMOVE operations */
-const ELIGIBLE_FOR_REMOVE: ProviderStatus[] = [
-  ProviderStatus.REGISTERED,
-  ProviderStatus.UPDATED,
+/** SerasaStatus values eligible for REMOVE operations */
+const ELIGIBLE_FOR_REMOVE: SerasaStatus[] = [
+  SerasaStatus.REGISTERED,
+  SerasaStatus.UPDATED,
 ];
 
 export interface CreateOperationParams {
@@ -417,13 +418,13 @@ export class OperationsService {
   selectEligibleContracts(
     walletId: string,
     action: OperationAction,
-    eligibleStatuses: ProviderStatus[],
+    eligibleStatuses: SerasaStatus[],
   ) {
     const where: any = {
       walletId,
       status: ContractStatus.ACTIVE,
       deletedAt: null,
-      providerStatus: { in: eligibleStatuses },
+      serasaStatus: { in: eligibleStatuses },
     };
 
     // For REMOVE, debtId must exist
@@ -452,7 +453,7 @@ export class OperationsService {
    * Get the eligible provider statuses for an action.
    * Exported for testing.
    */
-  getEligibleStatuses(action: OperationAction): ProviderStatus[] {
+  getEligibleStatuses(action: OperationAction): SerasaStatus[] {
     if (action === OperationAction.CREATE_OR_UPDATE) {
       return ELIGIBLE_FOR_CREATE;
     }

@@ -7,7 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   WebhookStatus,
   OperationItemStatus,
-  ProviderStatus,
+  SerasaStatus,
   ProviderType,
 } from '@prisma/client';
 
@@ -34,7 +34,7 @@ describe('WebhooksService', () => {
     debtId: null,
     contract: {
       id: 'contract-id',
-      providerStatus: 'SENT',
+      serasaStatus: 'SENT',
       debtId: null,
     },
   };
@@ -209,7 +209,7 @@ describe('WebhooksService', () => {
       );
       expect(prisma.contract.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { providerStatus: ProviderStatus.FAILED },
+          data: { serasaStatus: SerasaStatus.FAILED },
         }),
       );
     });
@@ -250,7 +250,7 @@ describe('WebhooksService', () => {
 
       expect(prisma.contract.update).toHaveBeenCalledWith({
         where: { id: 'contract-id' },
-        data: { providerStatus: ProviderStatus.IN_AGREEMENT },
+        data: { serasaStatus: SerasaStatus.IN_AGREEMENT },
       });
     });
 
@@ -263,7 +263,7 @@ describe('WebhooksService', () => {
 
       expect(prisma.contract.update).toHaveBeenCalledWith({
         where: { id: 'contract-id' },
-        data: { providerStatus: ProviderStatus.AGREEMENT_BREACHED },
+        data: { serasaStatus: SerasaStatus.AGREEMENT_BREACHED },
       });
     });
 
@@ -276,7 +276,7 @@ describe('WebhooksService', () => {
 
       expect(prisma.contract.update).toHaveBeenCalledWith({
         where: { id: 'contract-id' },
-        data: { providerStatus: ProviderStatus.PAID },
+        data: { serasaStatus: SerasaStatus.PAID },
       });
     });
 

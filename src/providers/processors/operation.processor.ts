@@ -150,10 +150,10 @@ export class OperationProcessor extends WorkerHost {
         },
       });
 
-      // Update contract providerStatus to SENT
+      // Update contract serasaStatus to SENT
       await this.prisma.contract.updateMany({
         where: { id: { in: items.map((i) => i.contractId) } },
-        data: { providerStatus: 'SENT' },
+        data: { serasaStatus: 'SENT' },
       });
     } else {
       // Error: mark items as FAILED
@@ -202,10 +202,10 @@ export class OperationProcessor extends WorkerHost {
         },
       });
 
-      // Update contract providerStatus to REMOVING
+      // Update contract serasaStatus to REMOVING
       await this.prisma.contract.updateMany({
         where: { id: { in: items.map((i) => i.contractId) } },
-        data: { providerStatus: 'REMOVING' },
+        data: { serasaStatus: 'REMOVING' },
       });
     } else {
       // Error: mark items as FAILED

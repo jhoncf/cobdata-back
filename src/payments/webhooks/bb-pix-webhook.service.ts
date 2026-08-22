@@ -263,7 +263,7 @@ export class BbPixWebhookService {
         data: {
           totalPaidAmount: totalPaid,
           lastPaymentAt: aggregation._max.paidAt ?? contract.lastPaymentAt,
-          ...(isFullyPaid ? { providerStatus: 'PAID' } : {}),
+          ...(isFullyPaid ? { paymentStatus: 'PAID' } : {}),
         },
       });
     });
