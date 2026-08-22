@@ -130,6 +130,8 @@ model Account {
   paymentGateways    PaymentGateway[]
   paymentCharges     PaymentCharge[]
   paymentSettlements PaymentSettlement[]
+  ligueLeadAgents    LigueLeadWalletAgent[]
+  ligueLeadDispatches LigueLeadDispatch[]
 }
 
 model User {
@@ -152,6 +154,7 @@ model User {
   invites            Invite[]
   auditLogs          AuditLog[]
   providerOperations ProviderOperation[]
+  ligueLeadDispatches LigueLeadDispatch[]
 }
 
 model UserScope {
@@ -227,6 +230,44 @@ model Wallet {
   userScopes         UserScope[]
   walletMappings     WalletMapping[]
   providerOperations ProviderOperation[]
+  ligueLeadAgent     LigueLeadWalletAgent?
+  ligueLeadDispatches LigueLeadDispatch[]
+}
+
+model LigueLeadWalletAgent {
+  id           String   @id @default(uuid())
+  accountId    String
+  walletId     String   @unique
+  externalId   String   @unique
+  name         String
+  prompt       String   @db.Text
+  greetings    String?
+  modelVersion String   @default("lumen-1")
+  voiceId      String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+  wallet  Wallet  @relation(fields: [walletId], references: [id])
+}
+
+model LigueLeadDispatch {
+  id         String   @id @default(uuid())
+  accountId  String
+  walletId   String
+  userId     String
+  type       String
+  title      String
+  externalId String?
+  totalItems Int
+  createdAt  DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id])
+  wallet  Wallet  @relation(fields: [walletId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([walletId, createdAt])
 }
 
 model Contract {

@@ -42,6 +42,12 @@ export const envSchema = z.object({
   SERASA_WEBHOOK_SECRET: z.string().optional().default(''),
   SERASA_TIMEOUT: z.coerce.number().default(30000),
 
+  // Communications - LigueLead
+  LIGUELEAD_API_URL: z.string().url().default('https://api.liguelead.com.br'),
+  LIGUELEAD_API_TOKEN: z.string().optional().default(''),
+  LIGUELEAD_APP_ID: z.string().uuid().optional(),
+  LIGUELEAD_TIMEOUT: z.coerce.number().default(30000),
+
   // Payment - Banco do Brasil
   BB_CLIENT_ID: z.string().optional().default(''),
   BB_CLIENT_SECRET: z.string().optional().default(''),

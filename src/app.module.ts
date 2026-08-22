@@ -15,6 +15,7 @@ import { AuditModule } from './audit/audit.module';
 import { PaymentsModule } from './payments/payments.module';
 import { HealthModule } from './health/health.module';
 import { SearchModule } from './search/search.module';
+import { LigueLeadModule } from './liguelead/liguelead.module';
 import { JwtAuthGuard, RolesGuard, ScopeGuard, MustResetPasswordGuard } from './common/guards';
 import { AuditInterceptor } from './common/interceptors';
 import { RequestIdMiddleware } from './common/middleware';
@@ -55,6 +56,7 @@ import { QUEUES } from './common/constants/queues';
     PaymentsModule,
     HealthModule,
     SearchModule,
+    LigueLeadModule,
   ],
   controllers: [],
   providers: [
