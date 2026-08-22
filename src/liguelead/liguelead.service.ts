@@ -72,79 +72,10 @@ export class LigueLeadService {
     const agent = await this.prisma.ligueLeadWalletAgent.findUnique({ where: { walletId } });
     if (!agent?.active) throw new BadRequestException('Configure e ative o agente de IA desta carteira antes de disparar ligações');
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
-    const payload = {
-      title: dto.title,
-      voice_agent_id: agent.externalId,
-      phones: contracts.map((contract) => ({
-        phone: contract.debtorPhone,
-        call_context: this.buildCallContext(contract),
-      })),
-      ...(dto.retryAttempts
-        ? { retry_attempts: dto.retryAttempts, retry_interval_min: dto.retryIntervalMin ?? 30 }
-        : {}),
-    };
+    const payload = { title: dto.title, voice_agent_id: agent.externalId, phones: contracts.map(c => ({ phone: c.debtorPhone, call_context: `Dados da cobrança: nome do devedor: ${c.debtorName}; CPF: ${c.debtorDocument}; contrato: ${c.contractNumber}; valor atualizado: R$ ${Number(c.updatedValue ?? c.originalValue).toFixed(2).replace('.', ',')}. Use estes dados somente para esta conversa.` })), ...(dto.retryAttempts ? { retry_attempts: dto.retryAttempts, retry_interval_min: dto.retryIntervalMin ?? 30 } : {}) };
     const remote = await this.request('/v1/voice-agent/call', { method: 'POST', body: JSON.stringify(payload) });
     const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
     return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'AI_CALL', title: dto.title, externalId, totalItems: contracts.length, items: { create: contracts.map(c => ({ contractId: c.id, phone: this.normalizePhone(c.debtorPhone!), externalCampaignId: externalId })) } } });
-  }
-
-  private buildCallContext(contract: {
-    debtorName: string | null;
-    debtorDocument: string;
-    contractNumber: string;
-    originalValue: unknown;
-    updatedValue: unknown;
-  }) {
-    const firstName = contract.debtorName?.trim().split(/\s+/)[0] || 'cliente';
-    const amount = Number(contract.updatedValue ?? contract.originalValue);
-
-    return [
-      'INSTRUÇÃO CRÍTICA DE SEGURANÇA: antes de informar contrato, valor ou qualquer pendência, pergunte se está falando com o primeiro nome abaixo e peça o CPF completo.',
-      'Só prossiga se a pessoa confirmar o primeiro nome E informar um CPF com os mesmos números do CPF de validação.',
-      'Se qualquer confirmação falhar, não revele dados financeiros; informe apenas que é um assunto particular e encerre cordialmente.',
-      '',
-      `Primeiro nome para confirmação: ${firstName}`,
-      `CPF de validação (uso interno, nunca leia em voz alta): ${contract.debtorDocument}`,
-      `Contrato (somente após validação): ${contract.contractNumber}`,
-      `Valor atualizado por extenso (somente após validação): ${this.amountInWords(amount)}`,
-    ].join('\n');
-  }
-
-  private amountInWords(value: number) {
-    const cents = Math.round(value * 100);
-    const reais = Math.floor(cents / 100);
-    const centavos = cents % 100;
-    const realText = `${this.integerInWords(reais)} ${reais === 1 ? 'real' : 'reais'}`;
-    if (!centavos) return realText;
-    return `${realText} e ${this.integerInWords(centavos)} ${centavos === 1 ? 'centavo' : 'centavos'}`;
-  }
-
-  private integerInWords(value: number): string {
-    if (value === 0) return 'zero';
-    const units = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
-    const teens = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
-    const tens = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
-    const hundreds = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
-    const belowThousand = (number: number): string => {
-      if (number === 100) return 'cem';
-      const parts: string[] = [];
-      if (number >= 100) parts.push(hundreds[Math.floor(number / 100)]!);
-      const remainder = number % 100;
-      if (remainder >= 20) {
-        parts.push(tens[Math.floor(remainder / 10)]!);
-        if (remainder % 10) parts.push(units[remainder % 10]!);
-      } else if (remainder >= 10) parts.push(teens[remainder - 10]!);
-      else if (remainder) parts.push(units[remainder]!);
-      return parts.join(' e ');
-    };
-    if (value < 1000) return belowThousand(value);
-    if (value < 1_000_000) {
-      const thousands = Math.floor(value / 1000);
-      const remainder = value % 1000;
-      const prefix = thousands === 1 ? 'mil' : `${belowThousand(thousands)} mil`;
-      return remainder ? `${prefix} e ${belowThousand(remainder)}` : prefix;
-    }
-    return new Intl.NumberFormat('pt-BR').format(value);
   }
 
   private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
