@@ -46,6 +46,7 @@ export const envSchema = z.object({
   LIGUELEAD_API_URL: z.string().url().default('https://api.liguelead.com.br'),
   LIGUELEAD_API_TOKEN: z.string().optional().default(''),
   LIGUELEAD_APP_ID: z.string().uuid().optional(),
+  LIGUELEAD_WEBHOOK_TOKEN: z.string().min(32).optional(),
   LIGUELEAD_TIMEOUT: z.coerce.number().default(30000),
 
   // Payment - Banco do Brasil

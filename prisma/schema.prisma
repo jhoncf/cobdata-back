@@ -132,6 +132,7 @@ model Account {
   paymentSettlements PaymentSettlement[]
   ligueLeadAgents    LigueLeadWalletAgent[]
   ligueLeadDispatches LigueLeadDispatch[]
+  ligueLeadWebhookEvents LigueLeadWebhookEvent[]
 }
 
 model User {
@@ -266,8 +267,44 @@ model LigueLeadDispatch {
   account Account @relation(fields: [accountId], references: [id])
   wallet  Wallet  @relation(fields: [walletId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
+  items   LigueLeadDispatchItem[]
 
   @@index([walletId, createdAt])
+}
+
+model LigueLeadDispatchItem {
+  id                 String   @id @default(uuid())
+  dispatchId         String
+  contractId         String
+  externalCampaignId String?
+  phone              String
+  status             String   @default("PENDING")
+  durationSeconds    Int?
+  recordingUrl       String?
+  transcript         Json?
+  actionExecuted     String?
+  rawPayload         Json?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  dispatch LigueLeadDispatch @relation(fields: [dispatchId], references: [id])
+  contract Contract           @relation(fields: [contractId], references: [id])
+
+  @@unique([dispatchId, contractId])
+  @@index([externalCampaignId, phone])
+}
+
+model LigueLeadWebhookEvent {
+  id        String   @id @default(uuid())
+  accountId String
+  eventKey  String   @unique
+  event     String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id])
 }
 
 model Contract {
@@ -315,6 +352,7 @@ model Contract {
   operationItems ProviderOperationItem[]
   paymentCharges PaymentCharge[]
   paymentSettlements PaymentSettlement[]
+  ligueLeadDispatchItems LigueLeadDispatchItem[]
 
   @@index([walletId, providerStatus])
   @@index([walletId, status, deletedAt])

@@ -1,4 +1,5 @@
-import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { createHash, timingSafeEqual } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendLigueLeadCallsDto, SendLigueLeadSmsDto, UpsertLigueLeadAgentDto } from './dto';
@@ -62,7 +63,8 @@ export class LigueLeadService {
     await this.wallet(walletId, accountId, scopes);
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
     const remote = await this.request('/v1/sms', { method: 'POST', body: JSON.stringify({ title: dto.title, message: dto.message, phones: contracts.map(c => c.debtorPhone) }) });
-    return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'SMS', title: dto.title, externalId: remote?.data?.campaign_id ?? remote?.campaign_id, totalItems: contracts.length } });
+    const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
+    return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'SMS', title: dto.title, externalId, totalItems: contracts.length, items: { create: contracts.map(c => ({ contractId: c.id, phone: this.normalizePhone(c.debtorPhone!), externalCampaignId: externalId })) } } });
   }
 
   async sendCalls(walletId: string, accountId: string, userId: string, dto: SendLigueLeadCallsDto, scopes?: string[]) {
@@ -72,6 +74,27 @@ export class LigueLeadService {
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
     const payload = { title: dto.title, voice_agent_id: agent.externalId, phones: contracts.map(c => ({ phone: c.debtorPhone, call_context: `Dados da cobrança: nome do devedor: ${c.debtorName}; CPF: ${c.debtorDocument}; contrato: ${c.contractNumber}; valor atualizado: R$ ${Number(c.updatedValue ?? c.originalValue).toFixed(2).replace('.', ',')}. Use estes dados somente para esta conversa.` })), ...(dto.retryAttempts ? { retry_attempts: dto.retryAttempts, retry_interval_min: dto.retryIntervalMin ?? 30 } : {}) };
     const remote = await this.request('/v1/voice-agent/call', { method: 'POST', body: JSON.stringify(payload) });
-    return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'AI_CALL', title: dto.title, externalId: remote?.data?.campaign_id ?? remote?.campaign_id, totalItems: contracts.length } });
+    const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
+    return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'AI_CALL', title: dto.title, externalId, totalItems: contracts.length, items: { create: contracts.map(c => ({ contractId: c.id, phone: this.normalizePhone(c.debtorPhone!), externalCampaignId: externalId })) } } });
+  }
+
+  private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
+
+  async processWebhook(token: string | undefined, payload: any) {
+    const expected = this.config.get<string>('LIGUELEAD_WEBHOOK_TOKEN');
+    if (!expected || !token || token.length !== expected.length || !timingSafeEqual(Buffer.from(token), Buffer.from(expected))) throw new UnauthorizedException('Webhook não autorizado');
+    if (!payload || payload.event !== 'campaign.status' || !payload.campaign?.id || !payload.campaign?.phone || !payload.campaign?.status) return { accepted: false };
+    const configuredAppId = this.config.get<string>('LIGUELEAD_APP_ID');
+    if (configuredAppId && payload.app_id && payload.app_id !== configuredAppId) throw new UnauthorizedException('Aplicação LigueLead inválida');
+    const phone = this.normalizePhone(String(payload.campaign.phone));
+    const item = await this.prisma.ligueLeadDispatchItem.findFirst({ where: { externalCampaignId: String(payload.campaign.id), phone }, include: { dispatch: { select: { accountId: true } } } });
+    if (!item) return { accepted: false };
+    const eventKey = createHash('sha256').update(`${payload.campaign.id}|${phone}|${payload.campaign.status}|${payload.occurred_at ?? ''}`).digest('hex');
+    try { await this.prisma.ligueLeadWebhookEvent.create({ data: { accountId: item.dispatch.accountId, eventKey, event: payload.event, payload } }); }
+    catch (error: any) { if (error?.code === 'P2002') return { accepted: true, duplicate: true }; throw error; }
+    const status = String(payload.campaign.status);
+    const mapped = status === 'sent' ? 'IN_PROGRESS' : status === 'answer' ? 'COMPLETED' : ['no_answer', 'busy', 'failed'].includes(status) ? 'FAILED' : 'UNKNOWN';
+    await this.prisma.ligueLeadDispatchItem.update({ where: { id: item.id }, data: { status: mapped, rawPayload: payload, ...(mapped === 'IN_PROGRESS' ? { startedAt: new Date() } : {}), ...(mapped === 'COMPLETED' || mapped === 'FAILED' ? { completedAt: new Date(), durationSeconds: Number(payload.campaign.duration_sec ?? 0), recordingUrl: payload.campaign.recording_url ?? null, transcript: payload.campaign.transcript ? { messages: payload.campaign.transcript } : undefined, actionExecuted: payload.campaign.action_executed ?? null } : {}) } });
+    return { accepted: true, status: mapped };
   }
 }
