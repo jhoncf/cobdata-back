@@ -30,7 +30,10 @@ export class LigueLeadService {
   }
 
   private async wallet(walletId: string, accountId: string, scopes?: string[]) {
-    const wallet = await this.prisma.wallet.findFirst({ where: { id: walletId, accountId, deletedAt: null } });
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, accountId, deletedAt: null },
+      include: { creditor: { select: { name: true } } },
+    });
     if (!wallet) throw new NotFoundException('Carteira não encontrada');
     if (scopes && !scopes.includes(walletId)) throw new ForbiddenException('Sem permissão para esta carteira');
     return wallet;
@@ -68,11 +71,27 @@ export class LigueLeadService {
   }
 
   async sendCalls(walletId: string, accountId: string, userId: string, dto: SendLigueLeadCallsDto, scopes?: string[]) {
-    await this.wallet(walletId, accountId, scopes);
+    const wallet = await this.wallet(walletId, accountId, scopes);
     const agent = await this.prisma.ligueLeadWalletAgent.findUnique({ where: { walletId } });
     if (!agent?.active) throw new BadRequestException('Configure e ative o agente de IA desta carteira antes de disparar ligações');
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
-    const payload = { title: dto.title, voice_agent_id: agent.externalId, phones: contracts.map(c => ({ phone: c.debtorPhone, call_context: `Dados da cobrança: nome do devedor: ${c.debtorName}; CPF: ${c.debtorDocument}; contrato: ${c.contractNumber}; valor atualizado: R$ ${Number(c.updatedValue ?? c.originalValue).toFixed(2).replace('.', ',')}. Use estes dados somente para esta conversa.` })), ...(dto.retryAttempts ? { retry_attempts: dto.retryAttempts, retry_interval_min: dto.retryIntervalMin ?? 30 } : {}) };
+    const payload = {
+      title: dto.title,
+      voice_agent_id: agent.externalId,
+      phones: contracts.map((contract) => ({
+        phone: contract.debtorPhone,
+        call_context: [
+          `Credor: ${wallet.creditor?.name ?? 'não informado'}`,
+          `Nome do titular: ${contract.debtorName ?? 'não informado'}`,
+          `CPF para confirmação interna: ${contract.debtorDocument}`,
+          `Contrato: ${contract.contractNumber}`,
+          `Valor atualizado: R$ ${Number(contract.updatedValue ?? contract.originalValue).toFixed(2).replace('.', ',')}`,
+        ].join('; '),
+      })),
+      ...(dto.retryAttempts
+        ? { retry_attempts: dto.retryAttempts, retry_interval_min: dto.retryIntervalMin ?? 30 }
+        : {}),
+    };
     const remote = await this.request('/v1/voice-agent/call', { method: 'POST', body: JSON.stringify(payload) });
     const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
     return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'AI_CALL', title: dto.title, externalId, totalItems: contracts.length, items: { create: contracts.map(c => ({ contractId: c.id, phone: this.normalizePhone(c.debtorPhone!), externalCampaignId: externalId })) } } });
