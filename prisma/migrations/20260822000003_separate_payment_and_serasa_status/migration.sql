@@ -30,8 +30,9 @@ SET "providerStatus" = CASE
 END;
 
 ALTER TABLE "Contract"
-  ALTER COLUMN "providerStatus" TYPE "SerasaStatus_new" USING "providerStatus"::"SerasaStatus_new",
-  RENAME COLUMN "providerStatus" TO "serasaStatus";
+  ALTER COLUMN "providerStatus" TYPE "SerasaStatus_new" USING "providerStatus"::"SerasaStatus_new";
+
+ALTER TABLE "Contract" RENAME COLUMN "providerStatus" TO "serasaStatus";
 
 ALTER TABLE "Contract"
   ALTER COLUMN "serasaStatus" SET DEFAULT 'NOT_ENABLED';
