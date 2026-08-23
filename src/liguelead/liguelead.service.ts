@@ -85,7 +85,7 @@ export class LigueLeadService {
           `Nome do titular: ${contract.debtorName ?? 'não informado'}`,
           `CPF para confirmação interna: ${contract.debtorDocument}`,
           `Contrato: ${contract.contractNumber}`,
-          `Valor atualizado: R$ ${Number(contract.updatedValue ?? contract.originalValue).toFixed(2).replace('.', ',')}`,
+          `Único valor autorizado para informar (valor atualizado): ${this.currencyInWords(contract.updatedValue ?? contract.originalValue)}`,
         ].join('; '),
       })),
       ...(dto.retryAttempts
@@ -95,6 +95,42 @@ export class LigueLeadService {
     const remote = await this.request('/v1/voice-agent/call', { method: 'POST', body: JSON.stringify(payload) });
     const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
     return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'AI_CALL', title: dto.title, externalId, totalItems: contracts.length, items: { create: contracts.map(c => ({ contractId: c.id, phone: this.normalizePhone(c.debtorPhone!), externalCampaignId: externalId })) } } });
+  }
+
+  private currencyInWords(value: unknown) {
+    const totalCents = Math.round(Number(value) * 100);
+    const reais = Math.floor(totalCents / 100);
+    const centavos = totalCents % 100;
+    const result = `${this.numberInWords(reais)} ${reais === 1 ? 'real' : 'reais'}`;
+    return centavos ? `${result} e ${this.numberInWords(centavos)} ${centavos === 1 ? 'centavo' : 'centavos'}` : result;
+  }
+
+  private numberInWords(value: number): string {
+    if (value === 0) return 'zero';
+    const units = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+    const teens = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+    const tens = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+    const hundreds = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+    const belowThousand = (number: number): string => {
+      if (number === 100) return 'cem';
+      const parts: string[] = [];
+      if (number >= 100) parts.push(hundreds[Math.floor(number / 100)]!);
+      const remaining = number % 100;
+      if (remaining >= 20) {
+        parts.push(tens[Math.floor(remaining / 10)]!);
+        if (remaining % 10) parts.push(units[remaining % 10]!);
+      } else if (remaining >= 10) parts.push(teens[remaining - 10]!);
+      else if (remaining) parts.push(units[remaining]!);
+      return parts.join(' e ');
+    };
+    if (value < 1000) return belowThousand(value);
+    if (value < 1_000_000) {
+      const thousands = Math.floor(value / 1000);
+      const remainder = value % 1000;
+      const prefix = thousands === 1 ? 'mil' : `${belowThousand(thousands)} mil`;
+      return remainder ? `${prefix} e ${belowThousand(remainder)}` : prefix;
+    }
+    return new Intl.NumberFormat('pt-BR').format(value);
   }
 
   private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
