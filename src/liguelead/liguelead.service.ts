@@ -67,7 +67,9 @@ export class LigueLeadService {
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
     const remote = await this.request('/v1/sms', { method: 'POST', body: JSON.stringify({ title: dto.title, message: dto.message, phones: contracts.map(c => c.debtorPhone) }) });
     const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
-    return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'SMS', title: dto.title, externalId, totalItems: contracts.length, items: { create: contracts.map(c => ({ contractId: c.id, phone: this.normalizePhone(c.debtorPhone!), externalCampaignId: externalId })) } } });
+    return this.createDispatchWithInteractions({
+      accountId, walletId, userId, type: 'SMS', title: dto.title, externalId, channel: 'SMS', contracts,
+    });
   }
 
   async sendCalls(walletId: string, accountId: string, userId: string, dto: SendLigueLeadCallsDto, scopes?: string[]) {
@@ -94,7 +96,37 @@ export class LigueLeadService {
     };
     const remote = await this.request('/v1/voice-agent/call', { method: 'POST', body: JSON.stringify(payload) });
     const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
-    return this.prisma.ligueLeadDispatch.create({ data: { accountId, walletId, userId, type: 'AI_CALL', title: dto.title, externalId, totalItems: contracts.length, items: { create: contracts.map(c => ({ contractId: c.id, phone: this.normalizePhone(c.debtorPhone!), externalCampaignId: externalId })) } } });
+    return this.createDispatchWithInteractions({
+      accountId, walletId, userId, type: 'AI_CALL', title: dto.title, externalId, channel: 'AI_VOICE_CALL', contracts,
+    });
+  }
+
+  private async createDispatchWithInteractions({ accountId, walletId, userId, type, title, externalId, channel, contracts }: {
+    accountId: string; walletId: string; userId: string; type: 'SMS' | 'AI_CALL'; title: string; externalId?: string;
+    channel: 'SMS' | 'AI_VOICE_CALL'; contracts: Array<{ id: string; debtorPhone: string | null }>;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const dispatch = await tx.ligueLeadDispatch.create({
+        data: {
+          accountId, walletId, userId, type, title, externalId, totalItems: contracts.length,
+          items: { create: contracts.map((contract) => ({ contractId: contract.id, phone: this.normalizePhone(contract.debtorPhone!), externalCampaignId: externalId })) },
+        },
+      });
+      await tx.contractInteraction.createMany({
+        data: contracts.map((contract) => ({
+          accountId,
+          walletId,
+          contractId: contract.id,
+          channel,
+          status: 'QUEUED',
+          provider: 'LIGUELEAD',
+          externalId,
+          contact: this.normalizePhone(contract.debtorPhone!),
+          summary: type === 'SMS' ? 'SMS enviado para processamento' : 'Ligação com IA enviada para processamento',
+        })),
+      });
+      return dispatch;
+    });
   }
 
   private currencyInWords(value: unknown) {
@@ -142,14 +174,47 @@ export class LigueLeadService {
     const configuredAppId = this.config.get<string>('LIGUELEAD_APP_ID');
     if (configuredAppId && payload.app_id && payload.app_id !== configuredAppId) throw new UnauthorizedException('Aplicação LigueLead inválida');
     const phone = this.normalizePhone(String(payload.campaign.phone));
-    const item = await this.prisma.ligueLeadDispatchItem.findFirst({ where: { externalCampaignId: String(payload.campaign.id), phone }, include: { dispatch: { select: { accountId: true } } } });
+    const item = await this.prisma.ligueLeadDispatchItem.findFirst({ where: { externalCampaignId: String(payload.campaign.id), phone }, include: { dispatch: { select: { accountId: true, walletId: true, type: true } } } });
     if (!item) return { accepted: false };
     const eventKey = createHash('sha256').update(`${payload.campaign.id}|${phone}|${payload.campaign.status}|${payload.occurred_at ?? ''}`).digest('hex');
     try { await this.prisma.ligueLeadWebhookEvent.create({ data: { accountId: item.dispatch.accountId, eventKey, event: payload.event, payload } }); }
     catch (error: any) { if (error?.code === 'P2002') return { accepted: true, duplicate: true }; throw error; }
-    const status = String(payload.campaign.status);
+    const status = String(payload.campaign.status).toLowerCase();
     const mapped = status === 'sent' ? 'IN_PROGRESS' : status === 'answer' ? 'COMPLETED' : ['no_answer', 'busy', 'failed'].includes(status) ? 'FAILED' : 'UNKNOWN';
     await this.prisma.ligueLeadDispatchItem.update({ where: { id: item.id }, data: { status: mapped, rawPayload: payload, ...(mapped === 'IN_PROGRESS' ? { startedAt: new Date() } : {}), ...(mapped === 'COMPLETED' || mapped === 'FAILED' ? { completedAt: new Date(), durationSeconds: Number(payload.campaign.duration_sec ?? 0), recordingUrl: payload.campaign.recording_url ?? null, transcript: payload.campaign.transcript ? { messages: payload.campaign.transcript } : undefined, actionExecuted: payload.campaign.action_executed ?? null } : {}) } });
+    const interactionStatus = this.interactionStatus(status);
+    const channel = item.dispatch.type === 'SMS' ? 'SMS' : 'AI_VOICE_CALL';
+    const occurredAt = payload.occurred_at ? new Date(payload.occurred_at) : new Date();
+    await this.prisma.contractInteraction.updateMany({
+      where: { accountId: item.dispatch.accountId, contractId: item.contractId, provider: 'LIGUELEAD', externalId: String(payload.campaign.id), channel },
+      data: {
+        status: interactionStatus,
+        summary: this.interactionSummary(channel, interactionStatus),
+        payload,
+        ...(payload.campaign.transcript ? { conversation: { messages: payload.campaign.transcript } } : {}),
+        occurredAt: Number.isNaN(occurredAt.getTime()) ? new Date() : occurredAt,
+      },
+    });
     return { accepted: true, status: mapped };
+  }
+
+  private interactionStatus(status: string) {
+    if (status === 'sent') return 'SENT' as const;
+    if (['delivered'].includes(status)) return 'DELIVERED' as const;
+    if (['read', 'opened'].includes(status)) return 'READ' as const;
+    if (['answer', 'answered'].includes(status)) return 'ANSWERED' as const;
+    if (['completed', 'complete'].includes(status)) return 'COMPLETED' as const;
+    if (['no_answer', 'busy'].includes(status)) return 'NO_ANSWER' as const;
+    if (['rejected'].includes(status)) return 'REJECTED' as const;
+    return 'FAILED' as const;
+  }
+
+  private interactionSummary(channel: 'SMS' | 'AI_VOICE_CALL', status: string) {
+    const channelLabel = channel === 'SMS' ? 'SMS' : 'Ligação com IA';
+    const labels: Record<string, string> = {
+      SENT: 'enviado', DELIVERED: 'entregue', READ: 'lido', ANSWERED: 'atendido',
+      COMPLETED: 'concluído', NO_ANSWER: 'não atendido', REJECTED: 'recusado', FAILED: 'com falha',
+    };
+    return `${channelLabel} ${labels[status] ?? 'atualizado'}`;
   }
 }

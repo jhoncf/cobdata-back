@@ -237,6 +237,26 @@ export class ContractsService {
     return result;
   }
 
+  /** List the communication history associated with a contract. */
+  async listInteractions(
+    id: string,
+    accountId: string,
+    userRole: string,
+    userScopes?: string[],
+  ) {
+    const contractWhere: any = { id, accountId, deletedAt: null };
+    if (userRole === 'VIEWER' && userScopes && userScopes.length > 0) {
+      contractWhere.walletId = { in: userScopes };
+    }
+    const contract = await this.prisma.contract.findFirst({ where: contractWhere, select: { id: true } });
+    if (!contract) throw new NotFoundException('Contract not found');
+
+    return this.prisma.contractInteraction.findMany({
+      where: { contractId: id, accountId },
+      orderBy: { occurredAt: 'desc' },
+    });
+  }
+
   /**
    * List contracts with pagination, filters, tag AND logic, and document masking for VIEWER.
    */

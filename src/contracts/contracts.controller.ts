@@ -60,6 +60,19 @@ export class ContractsController {
     return this.contractsService.list(query, user.accountId, user.role, userScopes);
   }
 
+  @Get(':id/interactions')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List contract interactions', description: 'List communication attempts and outcomes for a contract' })
+  @ApiResponse({ status: 200, description: 'Contract interactions' })
+  async listInteractions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: any,
+  ) {
+    const userScopes: string[] | undefined = req.userScopes;
+    return this.contractsService.listInteractions(id, user.accountId, user.role, userScopes);
+  }
+
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get a contract by ID', description: 'Retrieve a single contract with wallet and creditor data' })

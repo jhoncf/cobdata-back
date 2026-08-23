@@ -117,6 +117,25 @@ enum WebhookStatus {
   DUPLICATE
 }
 
+enum InteractionChannel {
+  AI_VOICE_CALL
+  SMS
+  WHATSAPP
+  EMAIL
+}
+
+enum InteractionStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  ANSWERED
+  COMPLETED
+  FAILED
+  NO_ANSWER
+  REJECTED
+}
+
 // ============ CORE ============
 
 model Account {
@@ -125,19 +144,20 @@ model Account {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users              User[]
-  creditors          Creditor[]
-  wallets            Wallet[]
-  contracts          Contract[]
-  providers          Provider[]
-  importBatches      ImportBatch[]
-  providerOperations ProviderOperation[]
-  paymentGateways    PaymentGateway[]
-  paymentCharges     PaymentCharge[]
-  paymentSettlements PaymentSettlement[]
-  ligueLeadAgents    LigueLeadWalletAgent[]
-  ligueLeadDispatches LigueLeadDispatch[]
+  users                  User[]
+  creditors              Creditor[]
+  wallets                Wallet[]
+  contracts              Contract[]
+  providers              Provider[]
+  importBatches          ImportBatch[]
+  providerOperations     ProviderOperation[]
+  paymentGateways        PaymentGateway[]
+  paymentCharges         PaymentCharge[]
+  paymentSettlements     PaymentSettlement[]
+  ligueLeadAgents        LigueLeadWalletAgent[]
+  ligueLeadDispatches    LigueLeadDispatch[]
   ligueLeadWebhookEvents LigueLeadWebhookEvent[]
+  contractInteractions   ContractInteraction[]
 }
 
 model User {
@@ -154,12 +174,12 @@ model User {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  account            Account             @relation(fields: [accountId], references: [id])
-  scopes             UserScope[]
-  sessions           Session[]
-  invites            Invite[]
-  auditLogs          AuditLog[]
-  providerOperations ProviderOperation[]
+  account             Account             @relation(fields: [accountId], references: [id])
+  scopes              UserScope[]
+  sessions            Session[]
+  invites             Invite[]
+  auditLogs           AuditLog[]
+  providerOperations  ProviderOperation[]
   ligueLeadDispatches LigueLeadDispatch[]
 }
 
@@ -229,15 +249,16 @@ model Wallet {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
-  account            Account             @relation(fields: [accountId], references: [id])
-  creditor           Creditor            @relation(fields: [creditorId], references: [id])
-  contracts          Contract[]
-  importBatches      ImportBatch[]
-  userScopes         UserScope[]
-  walletMappings     WalletMapping[]
-  providerOperations ProviderOperation[]
-  ligueLeadAgent     LigueLeadWalletAgent?
-  ligueLeadDispatches LigueLeadDispatch[]
+  account              Account               @relation(fields: [accountId], references: [id])
+  creditor             Creditor              @relation(fields: [creditorId], references: [id])
+  contracts            Contract[]
+  importBatches        ImportBatch[]
+  userScopes           UserScope[]
+  walletMappings       WalletMapping[]
+  providerOperations   ProviderOperation[]
+  ligueLeadAgent       LigueLeadWalletAgent?
+  ligueLeadDispatches  LigueLeadDispatch[]
+  contractInteractions ContractInteraction[]
 }
 
 model LigueLeadWalletAgent {
@@ -269,21 +290,21 @@ model LigueLeadDispatch {
   totalItems Int
   createdAt  DateTime @default(now())
 
-  account Account @relation(fields: [accountId], references: [id])
-  wallet  Wallet  @relation(fields: [walletId], references: [id])
-  user    User    @relation(fields: [userId], references: [id])
+  account Account                 @relation(fields: [accountId], references: [id])
+  wallet  Wallet                  @relation(fields: [walletId], references: [id])
+  user    User                    @relation(fields: [userId], references: [id])
   items   LigueLeadDispatchItem[]
 
   @@index([walletId, createdAt])
 }
 
 model LigueLeadDispatchItem {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   dispatchId         String
   contractId         String
   externalCampaignId String?
   phone              String
-  status             String   @default("PENDING")
+  status             String    @default("PENDING")
   durationSeconds    Int?
   recordingUrl       String?
   transcript         Json?
@@ -291,11 +312,11 @@ model LigueLeadDispatchItem {
   rawPayload         Json?
   startedAt          DateTime?
   completedAt        DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   dispatch LigueLeadDispatch @relation(fields: [dispatchId], references: [id])
-  contract Contract           @relation(fields: [contractId], references: [id])
+  contract Contract          @relation(fields: [contractId], references: [id])
 
   @@unique([dispatchId, contractId])
   @@index([externalCampaignId, phone])
@@ -312,53 +333,82 @@ model LigueLeadWebhookEvent {
   account Account @relation(fields: [accountId], references: [id])
 }
 
+// Registro imutável das tentativas e retornos de contato por contrato.
+// Novos provedores (e-mail, WhatsApp, SMS etc.) usam a mesma estrutura.
+model ContractInteraction {
+  id           String             @id @default(uuid())
+  accountId    String
+  walletId     String
+  contractId   String
+  channel      InteractionChannel
+  status       InteractionStatus  @default(QUEUED)
+  provider     String?
+  externalId   String?
+  contact      String?
+  summary      String?            @db.Text
+  conversation Json?
+  payload      Json?
+  occurredAt   DateTime           @default(now())
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  account  Account  @relation(fields: [accountId], references: [id])
+  wallet   Wallet   @relation(fields: [walletId], references: [id])
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId, occurredAt])
+  @@index([walletId, channel, status])
+  @@index([provider, externalId])
+}
+
 model Contract {
-  id                 String         @id @default(uuid())
-  accountId          String
-  walletId           String
-  debtorDocument     String
-  debtorDocumentHash String
-  debtorName         String         @default("")
-  contractNumber     String
-  debtType           DebtType
-  occurrenceDate     DateTime
-  dueDate            DateTime?
-  originalValue      Decimal        @db.Decimal(15, 2)
-  updatedValue       Decimal?       @db.Decimal(15, 2)
-  debtOrigin         String?
-  debtOriginDocHash  String?
-  productName        String?
-  debtorStreet       String?
-  debtorCity         String?
-  debtorPhone        String?
-  debtorEmail        String?
+  id                      String         @id @default(uuid())
+  accountId               String
+  walletId                String
+  debtorDocument          String
+  debtorDocumentHash      String
+  debtorName              String         @default("")
+  contractNumber          String
+  debtType                DebtType
+  occurrenceDate          DateTime
+  dueDate                 DateTime?
+  originalValue           Decimal        @db.Decimal(15, 2)
+  updatedValue            Decimal?       @db.Decimal(15, 2)
+  debtOrigin              String?
+  debtOriginDocHash       String?
+  productName             String?
+  debtorStreet            String?
+  debtorCity              String?
+  debtorPhone             String?
+  debtorEmail             String?
   debtorAddressNumber     String?
   debtorAddressComplement String?
   debtorNeighborhood      String?
   debtorState             String?
   debtorZipCode           String?
-  isNegativated      Boolean        @default(false)
-  cancelledAt        DateTime?
-  offer              Json?
-  deduplicationKey   String         @unique
-  serasaStatus       SerasaStatus @default(NOT_ENABLED)
-  paymentStatus      PaymentStatus @default(OPEN)
-  status             ContractStatus @default(ACTIVE)
-  debtId             String?
-  paidInstallments   Int            @default(0)
-  totalPaidAmount    Decimal        @default(0) @db.Decimal(15, 2)
-  lastPaymentAt      DateTime?
-  deletedAt          DateTime?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  isNegativated           Boolean        @default(false)
+  cancelledAt             DateTime?
+  offer                   Json?
+  deduplicationKey        String         @unique
+  serasaStatus            SerasaStatus   @default(NOT_ENABLED)
+  paymentStatus           PaymentStatus  @default(OPEN)
+  status                  ContractStatus @default(ACTIVE)
+  debtId                  String?
+  paidInstallments        Int            @default(0)
+  totalPaidAmount         Decimal        @default(0) @db.Decimal(15, 2)
+  lastPaymentAt           DateTime?
+  deletedAt               DateTime?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
-  account        Account                 @relation(fields: [accountId], references: [id])
-  wallet         Wallet                  @relation(fields: [walletId], references: [id])
-  tags           ContractTag[]
-  operationItems ProviderOperationItem[]
-  paymentCharges PaymentCharge[]
-  paymentSettlements PaymentSettlement[]
+  account                Account                 @relation(fields: [accountId], references: [id])
+  wallet                 Wallet                  @relation(fields: [walletId], references: [id])
+  tags                   ContractTag[]
+  operationItems         ProviderOperationItem[]
+  paymentCharges         PaymentCharge[]
+  paymentSettlements     PaymentSettlement[]
   ligueLeadDispatchItems LigueLeadDispatchItem[]
+  interactions           ContractInteraction[]
 
   @@index([walletId, serasaStatus])
   @@index([walletId, paymentStatus])
@@ -597,10 +647,10 @@ model PaymentCharge {
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
-  account        Account        @relation(fields: [accountId], references: [id])
-  contract       Contract       @relation(fields: [contractId], references: [id])
-  paymentGateway PaymentGateway @relation(fields: [paymentGatewayId], references: [id])
-  paymentEvents  PaymentEvent[]
+  account            Account             @relation(fields: [accountId], references: [id])
+  contract           Contract            @relation(fields: [contractId], references: [id])
+  paymentGateway     PaymentGateway      @relation(fields: [paymentGatewayId], references: [id])
+  paymentEvents      PaymentEvent[]
   paymentSettlements PaymentSettlement[]
 
   @@unique([idempotencyKey, paymentGatewayId])
