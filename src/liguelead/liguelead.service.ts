@@ -87,7 +87,7 @@ export class LigueLeadService {
           `Nome do titular: ${contract.debtorName ?? 'não informado'}`,
           `CPF esperado para confirmação interna — nunca leia em voz alta: ${this.spellDigits(contract.debtorDocument)}`,
           'Regra obrigatória de confirmação: compare somente os 11 dígitos informados pela pessoa com o CPF esperado acima. Não use cálculo, dígito verificador ou outra validação de CPF; a resposta só está incorreta quando os 11 dígitos forem diferentes.',
-          `Contrato: ${contract.contractNumber}`,
+          `NÚMERO DO CONTRATO — leia exatamente os caracteres separados por vírgulas: ${this.spellContractNumber(contract.contractNumber)}`,
           `VALOR AUTORIZADO PARA FALAR AO CLIENTE — copie a fala exata, sem converter ou arredondar: ${this.paymentAmountContext(contract.updatedValue ?? contract.originalValue)}`,
         ].join('; '),
       })),
@@ -174,6 +174,10 @@ export class LigueLeadService {
 
   private spellDigits(value: string) {
     return value.replace(/\D/g, '').split('').join(' ');
+  }
+
+  private spellContractNumber(value: string) {
+    return value.trim().split('').join(', ');
   }
 
   async processWebhook(tokens: Array<string | undefined>, payload: any) {
