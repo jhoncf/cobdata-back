@@ -170,29 +170,33 @@ export class LigueLeadService {
   async processWebhook(token: string | undefined, payload: any) {
     const expected = this.config.get<string>('LIGUELEAD_WEBHOOK_TOKEN');
     if (!expected || !token || token.length !== expected.length || !timingSafeEqual(Buffer.from(token), Buffer.from(expected))) throw new UnauthorizedException('Webhook não autorizado');
-    if (!payload || payload.event !== 'campaign.status' || !payload.campaign?.id || !payload.campaign?.phone || !payload.campaign?.status) return { accepted: false };
+    const isUnansweredEvent = payload?.event === 'call.unanswered';
+    const campaign = isUnansweredEvent
+      ? { id: payload.data?.campaign_id, phone: payload.data?.phone, status: payload.data?.status, duration_sec: payload.data?.duration_seconds }
+      : payload?.campaign;
+    if (!payload || !campaign?.id || !campaign?.phone || !campaign?.status) return { accepted: false };
     const configuredAppId = this.config.get<string>('LIGUELEAD_APP_ID');
     if (configuredAppId && payload.app_id && payload.app_id !== configuredAppId) throw new UnauthorizedException('Aplicação LigueLead inválida');
-    const phone = this.normalizePhone(String(payload.campaign.phone));
-    const item = await this.prisma.ligueLeadDispatchItem.findFirst({ where: { externalCampaignId: String(payload.campaign.id), phone }, include: { dispatch: { select: { accountId: true, walletId: true, type: true } } } });
+    const phone = this.normalizePhone(String(campaign.phone));
+    const item = await this.prisma.ligueLeadDispatchItem.findFirst({ where: { externalCampaignId: String(campaign.id), phone }, include: { dispatch: { select: { accountId: true, walletId: true, type: true } } } });
     if (!item) return { accepted: false };
-    const eventKey = createHash('sha256').update(`${payload.campaign.id}|${phone}|${payload.campaign.status}|${payload.occurred_at ?? ''}`).digest('hex');
+    const eventKey = createHash('sha256').update(`${campaign.id}|${phone}|${payload.event}|${campaign.status}|${payload.occurred_at ?? payload.timestamp ?? ''}`).digest('hex');
     try { await this.prisma.ligueLeadWebhookEvent.create({ data: { accountId: item.dispatch.accountId, eventKey, event: payload.event, payload } }); }
     catch (error: any) { if (error?.code === 'P2002') return { accepted: true, duplicate: true }; throw error; }
-    const status = String(payload.campaign.status).toLowerCase();
+    const status = String(campaign.status).toLowerCase().replace('-', '_');
     const mapped = status === 'sent' ? 'IN_PROGRESS' : status === 'answer' ? 'COMPLETED' : ['no_answer', 'busy', 'failed'].includes(status) ? 'FAILED' : 'UNKNOWN';
-    await this.prisma.ligueLeadDispatchItem.update({ where: { id: item.id }, data: { status: mapped, rawPayload: payload, ...(mapped === 'IN_PROGRESS' ? { startedAt: new Date() } : {}), ...(mapped === 'COMPLETED' || mapped === 'FAILED' ? { completedAt: new Date(), durationSeconds: Number(payload.campaign.duration_sec ?? 0), recordingUrl: payload.campaign.recording_url ?? null, transcript: payload.campaign.transcript ? { messages: payload.campaign.transcript } : undefined, actionExecuted: payload.campaign.action_executed ?? null } : {}) } });
+    await this.prisma.ligueLeadDispatchItem.update({ where: { id: item.id }, data: { status: mapped, rawPayload: payload, ...(mapped === 'IN_PROGRESS' ? { startedAt: new Date() } : {}), ...(mapped === 'COMPLETED' || mapped === 'FAILED' ? { completedAt: new Date(), durationSeconds: Number(campaign.duration_sec ?? 0), recordingUrl: campaign.recording_url ?? null, transcript: campaign.transcript ? { messages: campaign.transcript } : undefined, actionExecuted: campaign.action_executed ?? null } : {}) } });
     const interactionStatus = this.interactionStatus(status);
     const channel = item.dispatch.type === 'SMS' ? 'SMS' : 'AI_VOICE_CALL';
-    const occurredAt = payload.occurred_at ? new Date(payload.occurred_at) : new Date();
+    const occurredAt = payload.occurred_at ?? payload.timestamp ? new Date(payload.occurred_at ?? payload.timestamp) : new Date();
     await this.prisma.contractInteraction.updateMany({
-      where: { accountId: item.dispatch.accountId, contractId: item.contractId, provider: 'LIGUELEAD', externalId: String(payload.campaign.id), channel },
+      where: { accountId: item.dispatch.accountId, contractId: item.contractId, provider: 'LIGUELEAD', externalId: String(campaign.id), channel },
       data: {
         status: interactionStatus,
         summary: this.interactionSummary(channel, interactionStatus),
         payload,
-        recordingUrl: payload.campaign.recording_url ?? null,
-        ...(payload.campaign.transcript ? { conversation: { messages: payload.campaign.transcript } } : {}),
+        recordingUrl: campaign.recording_url ?? null,
+        ...(campaign.transcript ? { conversation: { messages: campaign.transcript } } : {}),
         occurredAt: Number.isNaN(occurredAt.getTime()) ? new Date() : occurredAt,
       },
     });
