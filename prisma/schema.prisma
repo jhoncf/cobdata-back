@@ -333,6 +333,17 @@ model LigueLeadWebhookEvent {
   account Account @relation(fields: [accountId], references: [id])
 }
 
+// Recebimentos autenticados preservados antes da associação a um contrato.
+// Permite diagnosticar e evoluir formatos de webhook do provedor sem perder dados.
+model LigueLeadWebhookReceipt {
+  id        String   @id @default(uuid())
+  event     String?
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 // Registro imutável das tentativas e retornos de contato por contrato.
 // Novos provedores (e-mail, WhatsApp, SMS etc.) usam a mesma estrutura.
 model ContractInteraction {

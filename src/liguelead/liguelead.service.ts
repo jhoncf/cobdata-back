@@ -170,6 +170,9 @@ export class LigueLeadService {
   async processWebhook(token: string | undefined, payload: any) {
     const expected = this.config.get<string>('LIGUELEAD_WEBHOOK_TOKEN');
     if (!expected || !token || token.length !== expected.length || !timingSafeEqual(Buffer.from(token), Buffer.from(expected))) throw new UnauthorizedException('Webhook não autorizado');
+    await this.prisma.ligueLeadWebhookReceipt.create({
+      data: { event: typeof payload?.event === 'string' ? payload.event : null, payload: payload ?? {} },
+    });
     const isUnansweredEvent = payload?.event === 'call.unanswered';
     const campaign = isUnansweredEvent
       ? { id: payload.data?.campaign_id, phone: payload.data?.phone, status: payload.data?.status, duration_sec: payload.data?.duration_seconds }
