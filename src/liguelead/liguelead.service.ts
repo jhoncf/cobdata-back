@@ -139,10 +139,7 @@ export class LigueLeadService {
   }
 
   private paymentAmountContext(value: unknown) {
-    const amount = Number(value);
-    const cents = Math.round(amount * 100);
-    const formatted = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
-    return `R$ ${formatted}; ${cents} centavos; FALA EXATA: “${this.currencyInWords(value)}”`;
+    return `FALA EXATA (pronuncie somente estas palavras, sem símbolos ou números): “${this.currencyInWords(value)}”`;
   }
 
   private numberInWords(value: number): string {
