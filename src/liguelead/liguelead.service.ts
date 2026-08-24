@@ -85,7 +85,8 @@ export class LigueLeadService {
         call_context: [
           `Credor: ${wallet.creditor?.name ?? 'não informado'}`,
           `Nome do titular: ${contract.debtorName ?? 'não informado'}`,
-          `CPF para confirmação interna: ${contract.debtorDocument}`,
+          `CPF esperado para confirmação interna — nunca leia em voz alta: ${this.spellDigits(contract.debtorDocument)}`,
+          'Regra obrigatória de confirmação: compare somente os 11 dígitos informados pela pessoa com o CPF esperado acima. Não use cálculo, dígito verificador ou outra validação de CPF; a resposta só está incorreta quando os 11 dígitos forem diferentes.',
           `Contrato: ${contract.contractNumber}`,
           `Único valor autorizado para informar (valor atualizado): ${this.currencyInWords(contract.updatedValue ?? contract.originalValue)}`,
         ].join('; '),
@@ -166,6 +167,10 @@ export class LigueLeadService {
   }
 
   private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
+
+  private spellDigits(value: string) {
+    return value.replace(/\D/g, '').split('').join(' ');
+  }
 
   async processWebhook(tokens: Array<string | undefined>, payload: any) {
     const expected = this.config.get<string>('LIGUELEAD_WEBHOOK_TOKEN');
