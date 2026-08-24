@@ -191,6 +191,7 @@ export class LigueLeadService {
         status: interactionStatus,
         summary: this.interactionSummary(channel, interactionStatus),
         payload,
+        recordingUrl: payload.campaign.recording_url ?? null,
         ...(payload.campaign.transcript ? { conversation: { messages: payload.campaign.transcript } } : {}),
         occurredAt: Number.isNaN(occurredAt.getTime()) ? new Date() : occurredAt,
       },

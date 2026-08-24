@@ -347,6 +347,7 @@ model ContractInteraction {
   contact      String?
   summary      String?            @db.Text
   conversation Json?
+  recordingUrl String?
   payload      Json?
   occurredAt   DateTime           @default(now())
   createdAt    DateTime           @default(now())
