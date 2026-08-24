@@ -88,7 +88,7 @@ export class LigueLeadService {
           `CPF esperado para confirmação interna — nunca leia em voz alta: ${this.spellDigits(contract.debtorDocument)}`,
           'Regra obrigatória de confirmação: compare somente os 11 dígitos informados pela pessoa com o CPF esperado acima. Não use cálculo, dígito verificador ou outra validação de CPF; a resposta só está incorreta quando os 11 dígitos forem diferentes.',
           `Contrato: ${contract.contractNumber}`,
-          `Único valor autorizado para informar (valor atualizado): ${this.currencyInWords(contract.updatedValue ?? contract.originalValue)}`,
+          `VALOR AUTORIZADO PARA FALAR AO CLIENTE — copie a fala exata, sem converter ou arredondar: ${this.paymentAmountContext(contract.updatedValue ?? contract.originalValue)}`,
         ].join('; '),
       })),
       ...(dto.retryAttempts
@@ -136,6 +136,13 @@ export class LigueLeadService {
     const centavos = totalCents % 100;
     const result = `${this.numberInWords(reais)} ${reais === 1 ? 'real' : 'reais'}`;
     return centavos ? `${result} e ${this.numberInWords(centavos)} ${centavos === 1 ? 'centavo' : 'centavos'}` : result;
+  }
+
+  private paymentAmountContext(value: unknown) {
+    const amount = Number(value);
+    const cents = Math.round(amount * 100);
+    const formatted = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+    return `R$ ${formatted}; ${cents} centavos; FALA EXATA: “${this.currencyInWords(value)}”`;
   }
 
   private numberInWords(value: number): string {
