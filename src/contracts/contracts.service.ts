@@ -3,6 +3,7 @@ import {
   UnprocessableEntityException,
   ConflictException,
   NotFoundException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeduplicationService } from './deduplication.service';
@@ -255,6 +256,51 @@ export class ContractsService {
       where: { contractId: id, accountId },
       orderBy: { occurredAt: 'desc' },
     });
+  }
+
+  /** Proxy a LigueLead recording only after validating the caller's contract scope. */
+  async getInteractionRecording(
+    contractId: string,
+    interactionId: string,
+    accountId: string,
+    userRole: string,
+    userScopes?: string[],
+  ) {
+    const contractWhere: any = { id: contractId, accountId, deletedAt: null };
+    if (userRole === 'VIEWER' && userScopes && userScopes.length > 0) {
+      contractWhere.walletId = { in: userScopes };
+    }
+    const contract = await this.prisma.contract.findFirst({ where: contractWhere, select: { id: true } });
+    if (!contract) throw new NotFoundException('Contract not found');
+
+    const interaction = await this.prisma.contractInteraction.findFirst({
+      where: { id: interactionId, contractId, accountId, recordingUrl: { not: null } },
+      select: { recordingUrl: true },
+    });
+    if (!interaction?.recordingUrl) throw new NotFoundException('Recording not found');
+
+    let recordingUrl: URL;
+    try {
+      recordingUrl = new URL(interaction.recordingUrl);
+    } catch {
+      throw new NotFoundException('Recording not found');
+    }
+    if (recordingUrl.protocol !== 'https:' || recordingUrl.hostname !== 'll-api-files.s3.us-east-1.amazonaws.com') {
+      throw new NotFoundException('Recording not found');
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(recordingUrl, { redirect: 'error' });
+    } catch {
+      throw new BadGatewayException('Não foi possível baixar a gravação');
+    }
+    if (!response.ok) throw new BadGatewayException('Não foi possível baixar a gravação');
+    return {
+      data: Buffer.from(await response.arrayBuffer()),
+      contentType: response.headers.get('content-type') || 'audio/wav',
+      fileName: `ligacao-${interactionId}.wav`,
+    };
   }
 
   /**

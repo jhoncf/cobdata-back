@@ -11,8 +11,10 @@ import {
   HttpStatus,
   ParseUUIDPipe,
   Req,
+  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Response } from 'express';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
@@ -71,6 +73,24 @@ export class ContractsController {
   ) {
     const userScopes: string[] | undefined = req.userScopes;
     return this.contractsService.listInteractions(id, user.accountId, user.role, userScopes);
+  }
+
+  @Get(':id/interactions/:interactionId/recording')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Download an interaction recording' })
+  async downloadInteractionRecording(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('interactionId', ParseUUIDPipe) interactionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: any,
+    @Res() res: Response,
+  ): Promise<void> {
+    const recording = await this.contractsService.getInteractionRecording(
+      id, interactionId, user.accountId, user.role, req.userScopes,
+    );
+    res.setHeader('Content-Type', recording.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${recording.fileName}"`);
+    res.send(recording.data);
   }
 
   @Get(':id')
