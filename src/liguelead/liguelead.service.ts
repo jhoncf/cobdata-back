@@ -167,9 +167,14 @@ export class LigueLeadService {
 
   private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
 
-  async processWebhook(token: string | undefined, payload: any) {
+  async processWebhook(tokens: Array<string | undefined>, payload: any) {
     const expected = this.config.get<string>('LIGUELEAD_WEBHOOK_TOKEN');
-    if (!expected || !token || token.length !== expected.length || !timingSafeEqual(Buffer.from(token), Buffer.from(expected))) throw new UnauthorizedException('Webhook não autorizado');
+    const isAuthorized = Boolean(expected) && tokens.some((token) => (
+      token
+      && token.length === expected!.length
+      && timingSafeEqual(Buffer.from(token), Buffer.from(expected!))
+    ));
+    if (!isAuthorized) throw new UnauthorizedException('Webhook não autorizado');
     await this.prisma.ligueLeadWebhookReceipt.create({
       data: { event: typeof payload?.event === 'string' ? payload.event : null, payload: payload ?? {} },
     });
