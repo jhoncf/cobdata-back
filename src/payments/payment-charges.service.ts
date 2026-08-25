@@ -438,7 +438,7 @@ export class PaymentChargesService {
   async createPixByDocument(
     dto: GeneratePixByDocumentDto,
     accountId: string,
-    userId: string,
+    userId: string | undefined,
     requestId: string,
   ) {
     // Normalize document (remove punctuation)

@@ -136,6 +136,12 @@ enum InteractionStatus {
   REJECTED
 }
 
+enum ApiKeyScope {
+  CONTRACTS_READ
+  CONTRACT_CONTACTS_WRITE
+  PIX_CREATE
+}
+
 // ============ CORE ============
 
 model Account {
@@ -158,6 +164,24 @@ model Account {
   ligueLeadDispatches    LigueLeadDispatch[]
   ligueLeadWebhookEvents LigueLeadWebhookEvent[]
   contractInteractions   ContractInteraction[]
+  apiKeys                ApiKey[]
+}
+
+model ApiKey {
+  id          String        @id @default(uuid())
+  accountId   String
+  name        String
+  tokenPrefix String
+  tokenHash   String        @unique
+  scopes      ApiKeyScope[]
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, revokedAt])
 }
 
 model User {

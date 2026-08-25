@@ -17,10 +17,12 @@ export class PublicDebtService {
     return normalized;
   }
 
-  async lookup(document: string) {
+  async lookup(document: string, accountId?: string, contractNumber?: string) {
     const debtorDocument = this.normalizeDocument(document);
     const contracts = await this.prisma.contract.findMany({
       where: {
+        ...(accountId ? { accountId } : {}),
+        ...(contractNumber ? { contractNumber } : {}),
         debtorDocument,
         status: 'ACTIVE',
         paymentStatus: { not: 'PAID' },

@@ -48,6 +48,6 @@ import { PublicDebtRateLimitService } from './public-debt-rate-limit.service';
     },
     PaymentProviderFactory,
   ],
-  exports: [PaymentGatewaysService, PaymentChargesService, SettlementProcessorService],
+  exports: [PaymentGatewaysService, PaymentChargesService, SettlementProcessorService, PublicDebtService],
 })
 export class PaymentsModule {}

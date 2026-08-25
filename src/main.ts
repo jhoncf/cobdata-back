@@ -24,7 +24,7 @@ async function bootstrap() {
     origin: corsOrigin.split(',').map(o => o.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-API-Key', 'Idempotency-Key'],
   });
 
   app.setGlobalPrefix('api', {
@@ -43,8 +43,9 @@ async function bootstrap() {
     }),
   );
 
-  // OpenAPI/Swagger — only in dev/staging
-  if (nodeEnv !== 'production') {
+  // OpenAPI/Swagger — documentação da API interna e de integrações.
+  // Não expõe segredos: as chaves nunca são persistidas em texto puro.
+  {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('CobCom - CRM API')
       .setDescription('CobCom - CRM — REST API para gestão de cobranças')
@@ -57,6 +58,10 @@ async function bootstrap() {
           description: 'Enter your JWT access token',
         },
         'bearer',
+      )
+      .addApiKey(
+        { type: 'apiKey', in: 'header', name: 'X-API-Key', description: 'Chave de integração CobCom' },
+        'apiKey',
       )
       .build();
 
