@@ -38,7 +38,8 @@ export class SerasaLnopAdapter implements ProviderAdapter {
     config: ProviderConfig,
   ): Promise<SendResult> {
     const url = `${config.baseUrl}/debts/create`;
-    const body = JSON.stringify({ items });
+    // A API Limpa Nome Parceiros v3 recebe uma lista direta, com no máximo uma dívida.
+    const body = JSON.stringify(items.map(({ operationItemId, ...debt }) => debt));
 
     return this.executeWithRetry(url, body, config);
   }
@@ -48,7 +49,7 @@ export class SerasaLnopAdapter implements ProviderAdapter {
     config: ProviderConfig,
   ): Promise<SendResult> {
     const url = `${config.baseUrl}/debts/remove`;
-    const body = JSON.stringify({ items });
+    const body = JSON.stringify(items.map(({ operationItemId, ...debt }) => debt));
 
     return this.executeWithRetry(url, body, config);
   }
@@ -171,7 +172,9 @@ export class SerasaLnopAdapter implements ProviderAdapter {
         return {
           httpStatus,
           transactionId: data?.transactionId,
-          items: data?.items,
+          items: Array.isArray(data?.debtIds)
+            ? data.debtIds.map((debtId: string) => ({ debtId }))
+            : data?.items,
         };
       }
 

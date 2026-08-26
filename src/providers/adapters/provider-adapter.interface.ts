@@ -2,20 +2,18 @@ import { ProviderType } from '@prisma/client';
 
 export interface DebtPayload {
   operationItemId: string;
-  debtorDocument: string;
+  document: string;
   contractNumber: string;
+  wallet: string;
   debtType: string;
   occurrenceDate: string;
-  originalValue: number;
-  updatedValue?: number;
+  debtValue: number;
   debtOrigin?: string;
 }
 
 export interface RemovePayload {
   operationItemId: string;
-  debtId: string;
-  debtorDocument: string;
-  contractNumber: string;
+  id: string;
 }
 
 export interface ProviderConfig {

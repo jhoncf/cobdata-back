@@ -61,6 +61,7 @@ export class OperationProcessor extends WorkerHost {
           contract: {
             select: {
               id: true,
+              walletId: true,
               debtorDocument: true,
               contractNumber: true,
               debtType: true,
@@ -120,18 +121,20 @@ export class OperationProcessor extends WorkerHost {
     config: ProviderConfig,
     operationId: string,
   ): Promise<void> {
-    const payloads: DebtPayload[] = items.map((item) => ({
-      operationItemId: item.id,
-      debtorDocument: item.contract.debtorDocument,
-      contractNumber: item.contract.contractNumber,
-      debtType: item.contract.debtType,
-      occurrenceDate: item.contract.occurrenceDate.toISOString(),
-      originalValue: Number(item.contract.originalValue),
-      updatedValue: item.contract.updatedValue
-        ? Number(item.contract.updatedValue)
-        : undefined,
-      debtOrigin: item.contract.debtOrigin || undefined,
-    }));
+    const payloads: DebtPayload[] = items.map((item) => {
+      const wallet = config.walletMappings.get(item.contract.walletId);
+      if (!wallet) throw new Error(`Carteira Serasa não configurada para o contrato ${item.contract.id}`);
+      return {
+        operationItemId: item.id,
+        document: item.contract.debtorDocument,
+        contractNumber: item.contract.contractNumber,
+        wallet,
+        debtType: item.contract.debtType,
+        occurrenceDate: item.contract.occurrenceDate.toISOString().slice(0, 10),
+        debtValue: Number(item.contract.updatedValue ?? item.contract.originalValue),
+        debtOrigin: item.contract.debtOrigin || undefined,
+      };
+    });
 
     const result = await this.adapter.sendDebts(payloads, config);
 
@@ -180,9 +183,7 @@ export class OperationProcessor extends WorkerHost {
   ): Promise<void> {
     const payloads: RemovePayload[] = items.map((item) => ({
       operationItemId: item.id,
-      debtId: item.contract.debtId!,
-      debtorDocument: item.contract.debtorDocument,
-      contractNumber: item.contract.contractNumber,
+      id: item.contract.debtId!,
     }));
 
     const result = await this.adapter.removeDebts(payloads, config);
