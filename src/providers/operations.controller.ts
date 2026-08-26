@@ -59,6 +59,18 @@ export class OperationsController {
     return this.operationsService.createForContract(contractId, user.id, user.accountId);
   }
 
+  @Post('contracts/:contractId/remove')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: 'CONTRACT_REMOVE_SERASA', resourceType: 'Contract' })
+  @ApiOperation({ summary: 'Remove one contract from Serasa' })
+  async removeForContract(
+    @Param('contractId', ParseUUIDPipe) contractId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.operationsService.createForContract(contractId, user.id, user.accountId, 'REMOVE');
+  }
+
   @Get()
   @Roles('ADMIN', 'OPERATIONAL', 'VIEWER')
   @ApiOperation({ summary: 'List operations', description: 'Paginated list of provider operations with optional filters' })

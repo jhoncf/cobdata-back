@@ -196,14 +196,29 @@ export class OperationsService {
     };
   }
 
-  /** Queues one eligible contract for inclusion/update in the linked Serasa wallet. */
-  async createForContract(contractId: string, userId: string, accountId: string) {
+  /** Queues a single inclusion/update or removal operation for a contract. */
+  async createForContract(
+    contractId: string,
+    userId: string,
+    accountId: string,
+    action: OperationAction = OperationAction.CREATE_OR_UPDATE,
+  ) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, accountId, deletedAt: null, status: ContractStatus.ACTIVE },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
-    if (!ELIGIBLE_FOR_CREATE.includes(contract.serasaStatus)) {
-      throw new ConflictException('Este contrato já está sincronizado ou não é elegível para envio à Serasa');
+    const eligibleStatuses = action === OperationAction.REMOVE
+      ? [...ELIGIBLE_FOR_REMOVE, SerasaStatus.SENT]
+      : ELIGIBLE_FOR_CREATE;
+    if (!eligibleStatuses.includes(contract.serasaStatus)) {
+      throw new ConflictException(
+        action === OperationAction.REMOVE
+          ? 'Este contrato não está elegível para remoção da Serasa'
+          : 'Este contrato já está sincronizado ou não é elegível para envio à Serasa',
+      );
+    }
+    if (action === OperationAction.REMOVE && !contract.debtId) {
+      throw new ConflictException('Não foi encontrada a identificação da dívida na Serasa para removê-la');
     }
 
     const mapping = await this.prisma.walletMapping.findFirst({
@@ -221,7 +236,7 @@ export class OperationsService {
           providerId: mapping.providerId,
           walletId: contract.walletId,
           userId,
-          action: OperationAction.CREATE_OR_UPDATE,
+          action,
           status: OperationStatus.PENDING,
           totalItems: 1,
         },
@@ -234,7 +249,7 @@ export class OperationsService {
 
     await this.operationQueue.add(
       `operation-contract-${operation.id}`,
-      { operationId: operation.id, batchIndex: 0, providerId: mapping.providerId, action: OperationAction.CREATE_OR_UPDATE },
+      { operationId: operation.id, batchIndex: 0, providerId: mapping.providerId, action },
       { attempts: 1 },
     );
     return { id: operation.id, status: operation.status, contractId: contract.id };
