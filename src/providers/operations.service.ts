@@ -24,6 +24,8 @@ const ELIGIBLE_FOR_CREATE: SerasaStatus[] = [
   SerasaStatus.NOT_ENABLED,
   SerasaStatus.PENDING,
   SerasaStatus.FAILED,
+  // A remoção confirmada pela Serasa libera o mesmo contrato para um novo envio.
+  SerasaStatus.REMOVED,
 ];
 
 /** SerasaStatus values eligible for REMOVE operations */
