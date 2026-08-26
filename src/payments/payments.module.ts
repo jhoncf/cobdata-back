@@ -21,9 +21,10 @@ import { BbWebhookRegistrationService } from './webhooks/bb-webhook-registration
 import { PublicDebtController } from './public-debt.controller';
 import { PublicDebtService } from './public-debt.service';
 import { PublicDebtRateLimitService } from './public-debt-rate-limit.service';
+import { ProvidersModule } from '../providers/providers.module';
 
 @Module({
-  imports: [AuditModule, ScheduleModule.forRoot()],
+  imports: [AuditModule, ProvidersModule, ScheduleModule.forRoot()],
   controllers: [PaymentGatewaysController, PaymentChargesController, BbPixWebhookController, PublicDebtController],
   providers: [
     PaymentGatewaysService,

@@ -170,6 +170,17 @@ export class OperationsService {
         data: itemsData,
       });
 
+      // Reflect the submitted action immediately in the CRM list while the
+      // provider processes the asynchronous request.
+      await tx.contract.updateMany({
+        where: { id: { in: eligibleContracts.map((contract) => contract.id) } },
+        data: {
+          serasaStatus: action === OperationAction.REMOVE
+            ? SerasaStatus.REMOVING
+            : SerasaStatus.SENT,
+        },
+      });
+
       return op;
     });
 
@@ -258,6 +269,14 @@ export class OperationsService {
       await tx.providerOperationItem.create({
         data: { operationId: op.id, contractId: contract.id, batchIndex: 0, status: OperationItemStatus.PENDING },
       });
+      await tx.contract.update({
+        where: { id: contract.id },
+        data: {
+          serasaStatus: action === OperationAction.REMOVE
+            ? SerasaStatus.REMOVING
+            : SerasaStatus.SENT,
+        },
+      });
       return op;
     });
 
@@ -267,6 +286,32 @@ export class OperationsService {
       { attempts: 1 },
     );
     return { id: operation.id, status: operation.status, contractId: contract.id };
+  }
+
+  /** Removes a Serasa debt after it was paid through another payment channel. */
+  async createAutomaticRemovalForPaidContract(contractId: string, accountId: string) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: contractId, accountId, deletedAt: null, debtId: { not: null }, serasaStatus: { in: [SerasaStatus.SENT, SerasaStatus.REGISTERED, SerasaStatus.UPDATED] } },
+    });
+    if (!contract) return;
+
+    const inProgress = await this.prisma.providerOperationItem.findFirst({
+      where: {
+        contractId,
+        operation: { action: OperationAction.REMOVE, status: { in: [OperationStatus.PENDING, OperationStatus.PROCESSING] } },
+      },
+    });
+    if (inProgress) return;
+
+    const user = await this.prisma.user.findFirst({
+      where: { accountId, isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!user) {
+      this.logger.warn(`Unable to auto-remove Serasa debt for contract ${contractId}: no active account user`);
+      return;
+    }
+    await this.createForContract(contractId, user.id, accountId, OperationAction.REMOVE);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OperationsService } from '../../providers/operations.service';
 import {
   PaymentChargeStatus,
   PaymentEventSource,
@@ -30,7 +31,10 @@ export interface BbPixWebhookPayload {
 export class BbPixWebhookService {
   private readonly logger = new Logger(BbPixWebhookService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly operationsService: OperationsService,
+  ) {}
 
   /**
    * Processes the BB Pix webhook payload.
@@ -236,7 +240,7 @@ export class BbPixWebhookService {
    * current debt value, preserving partial-payment and installment flows.
    */
   private async refreshContractPaymentProjection(contractId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    const paidContract = await this.prisma.$transaction(async (tx) => {
       const [contract, aggregation] = await Promise.all([
         tx.contract.findUnique({ where: { id: contractId } }),
         tx.paymentSettlement.aggregate({
@@ -266,7 +270,18 @@ export class BbPixWebhookService {
           ...(isFullyPaid ? { paymentStatus: 'PAID' } : {}),
         },
       });
+
+      return isFullyPaid ? { id: contract.id, accountId: contract.accountId } : null;
     });
+
+    // A payment completed outside Serasa must remove the debt there as well.
+    // The operation is idempotent and only queues when the debt is still active.
+    if (paidContract) {
+      await this.operationsService.createAutomaticRemovalForPaidContract(
+        paidContract.id,
+        paidContract.accountId,
+      );
+    }
   }
 
   /**
