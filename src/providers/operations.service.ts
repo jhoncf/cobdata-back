@@ -68,6 +68,9 @@ export class OperationsService {
     if (!wallet) {
       throw new UnprocessableEntityException('Wallet não encontrada');
     }
+    if (!wallet.serasaWalletId) {
+      throw new UnprocessableEntityException('Selecione e salve uma Carteira Serasa na carteira CRM antes de sincronizar contratos');
+    }
 
     const walletMapping = await this.prisma.walletMapping.findFirst({
       where: { walletId },
@@ -102,6 +105,9 @@ export class OperationsService {
 
     if (!wallet) {
       throw new UnprocessableEntityException('Wallet não encontrada');
+    }
+    if (!wallet.serasaWalletId) {
+      throw new UnprocessableEntityException('Selecione e salve uma Carteira Serasa na carteira CRM antes de sincronizar contratos');
     }
 
     // Find provider with mapping for this wallet
