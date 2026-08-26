@@ -205,8 +205,14 @@ export class OperationsService {
   ) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, accountId, deletedAt: null, status: ContractStatus.ACTIVE },
+      include: { wallet: { select: { serasaWalletId: true } } },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
+    if (!contract.wallet.serasaWalletId) {
+      throw new UnprocessableEntityException(
+        'Selecione e salve uma Carteira Serasa na carteira CRM antes de sincronizar contratos',
+      );
+    }
     const eligibleStatuses = action === OperationAction.REMOVE
       ? [...ELIGIBLE_FOR_REMOVE, SerasaStatus.SENT]
       : ELIGIBLE_FOR_CREATE;
