@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { GlobalExceptionFilter } from './common/filters';
 import { TransformInterceptor } from './common/interceptors';
 
@@ -43,12 +44,12 @@ async function bootstrap() {
     }),
   );
 
-  // OpenAPI/Swagger — documentação da API interna e de integrações.
-  // Não expõe segredos: as chaves nunca são persistidas em texto puro.
+  // Public OpenAPI documentation contains only partner integration routes.
+  // Internal CRM endpoints must never be enumerated in this public URL.
   {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('CobCom - CRM API')
-      .setDescription('CobCom - CRM — REST API para gestão de cobranças')
+      .setTitle('CobCom — API de Cobranças')
+      .setDescription('Documentação para parceiros integrarem a geração de Pix CobCom.')
       .setVersion('0.1.0')
       .addBearerAuth(
         {
@@ -65,7 +66,10 @@ async function bootstrap() {
       )
       .build();
 
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    const document = SwaggerModule.createDocument(app, swaggerConfig, {
+      include: [IntegrationsModule],
+      deepScanRoutes: false,
+    });
     SwaggerModule.setup('api/docs', app, document, {
       swaggerOptions: {
         persistAuthorization: true,

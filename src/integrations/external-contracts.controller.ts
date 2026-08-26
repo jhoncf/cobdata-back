@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { ApiHeader, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiHeader, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { Public } from '../common/decorators';
 import { ApiKeyGuard } from './api-key.guard';
 import { ApiKeyScopes } from './api-key-scopes.decorator';
@@ -18,6 +18,7 @@ export class ExternalContractsController {
   constructor(private readonly contracts: ExternalContractsService) {}
 
   @Get()
+  @ApiExcludeEndpoint()
   @ApiKeyScopes('CONTRACTS_READ')
   @ApiOperation({ summary: 'Consultar contratos pendentes por CPF/CNPJ', description: 'Usa a mesma regra de elegibilidade da página pública: contrato ativo, não pago, carteira ativa e valor atualizado positivo.' })
   @ApiResponse({ status: 200, description: 'Contratos pendentes e elegíveis para cobrança.' })
@@ -26,6 +27,7 @@ export class ExternalContractsController {
   }
 
   @Post(':contractNumber/contacts')
+  @ApiExcludeEndpoint()
   @HttpCode(HttpStatus.OK)
   @ApiKeyScopes('CONTRACT_CONTACTS_WRITE')
   @ApiOperation({ summary: 'Atualizar contatos de um contrato específico', description: 'Atualiza somente telefone e/ou e-mail após validar CPF/CNPJ e número do contrato.' })

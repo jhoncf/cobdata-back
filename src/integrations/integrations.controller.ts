@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiExcludeController, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../common/interfaces';
@@ -7,6 +7,7 @@ import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { IntegrationKeysService } from './integration-keys.service';
 
 @ApiTags('Integration keys')
+@ApiExcludeController()
 @ApiBearerAuth('bearer')
 @Controller('integrations/api-keys')
 @Roles('ADMIN')
