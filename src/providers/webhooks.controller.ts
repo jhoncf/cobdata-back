@@ -4,6 +4,7 @@ import {
   Req,
   Res,
   Query,
+  Param,
   HttpCode,
   RawBodyRequest,
   Logger,
@@ -31,6 +32,29 @@ export class WebhooksController {
     @Req() req: RawBodyRequest<Request>,
     @Res() res: Response,
     @Query('token') token?: string,
+  ): Promise<void> {
+    return this.processSerasaWebhook(req, res, token);
+  }
+
+  /**
+   * Path-token variant for providers whose webhook UI strips query strings
+   * during endpoint validation. The token is still validated server-side.
+   */
+  @Post('serasa/token/:token')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Receive Serasa LNOP webhook (path token)' })
+  async handleSerasaWebhookWithPathToken(
+    @Req() req: RawBodyRequest<Request>,
+    @Res() res: Response,
+    @Param('token') token: string,
+  ): Promise<void> {
+    return this.processSerasaWebhook(req, res, token);
+  }
+
+  private async processSerasaWebhook(
+    req: RawBodyRequest<Request>,
+    res: Response,
+    token?: string,
   ): Promise<void> {
     const startTime = Date.now();
 
