@@ -3,6 +3,7 @@ import {
   Post,
   Req,
   Res,
+  Query,
   HttpCode,
   RawBodyRequest,
   Logger,
@@ -29,6 +30,7 @@ export class WebhooksController {
   async handleSerasaWebhook(
     @Req() req: RawBodyRequest<Request>,
     @Res() res: Response,
+    @Query('token') token?: string,
   ): Promise<void> {
     const startTime = Date.now();
 
@@ -60,6 +62,7 @@ export class WebhooksController {
         headers,
         rawBody,
         payload,
+        token,
       );
 
       const elapsed = Date.now() - startTime;

@@ -11,10 +11,12 @@ import {
 } from '@prisma/client';
 
 export interface WebhookPayload {
-  eventType: string;
-  transactionId: string;
+  eventType?: string;
+  transactionId?: string;
   status?: number;
   debtId?: string;
+  debtIds?: string[];
+  agreementId?: string;
   errorCode?: string;
   errorMessage?: string;
   [key: string]: unknown;
@@ -37,21 +39,16 @@ export class WebhooksService {
     headers: Record<string, string>,
     rawBody: Buffer,
     payload: WebhookPayload,
+    suppliedToken?: string,
   ): Promise<{ status: number; message: string }> {
-    // 1. Validate HMAC signature
+    // 1. Validate the shared URL token when configured. The Serasa portal
+    // allows a full webhook URL, so this is supported even when no HMAC header
+    // is provided by the provider. The legacy HMAC validation remains supported.
+    const webhookToken = this.configService.get<string>('SERASA_WEBHOOK_TOKEN');
     const secret = this.configService.get<string>('SERASA_WEBHOOK_SECRET');
-    if (!secret) {
-      this.logger.error('SERASA_WEBHOOK_SECRET not configured');
-      throw new UnauthorizedException('Webhook signature validation failed');
-    }
-
-    const isValid = this.serasaAdapter.validateWebhookSignature(
-      headers,
-      rawBody,
-      secret,
-    );
-
-    if (!isValid) {
+    const tokenIsValid = !!webhookToken && suppliedToken === webhookToken;
+    const signatureIsValid = !!secret && this.serasaAdapter.validateWebhookSignature(headers, rawBody, secret);
+    if (!tokenIsValid && !signatureIsValid) {
       throw new UnauthorizedException('Invalid webhook signature');
     }
 
@@ -65,7 +62,8 @@ export class WebhooksService {
       return { status: 200, message: 'OK' };
     }
 
-    const { eventType, transactionId } = payload;
+    const eventType = payload.eventType || 'UNKNOWN';
+    const transactionId = payload.transactionId;
 
     // 3. Dedup check: (transactionId, eventType)
     if (transactionId && eventType) {
@@ -106,12 +104,17 @@ export class WebhooksService {
       return { status: 200, message: 'No transactionId, marked as UNMATCHED' };
     }
 
-    const operationItem = await this.prisma.providerOperationItem.findFirst({
+    const operationItem = transactionId ? await this.prisma.providerOperationItem.findFirst({
       where: { transactionId },
       include: { contract: true },
-    });
+    }) : null;
 
-    if (!operationItem) {
+    const debtIds = [payload.debtId, ...(payload.debtIds ?? [])].filter((id): id is string => !!id);
+    const contract = operationItem?.contract ?? (debtIds.length > 0
+      ? await this.prisma.contract.findFirst({ where: { debtId: { in: debtIds }, deletedAt: null } })
+      : null);
+
+    if (!operationItem && !contract) {
       await this.prisma.webhookEvent.update({
         where: { id: webhookEvent.id },
         data: { status: WebhookStatus.UNMATCHED, processedAt: new Date() },
@@ -121,7 +124,11 @@ export class WebhooksService {
 
     // 6. Process event based on type
     try {
-      await this.processEvent(eventType, payload, operationItem);
+      if (operationItem) {
+        await this.processEvent(eventType, payload, operationItem);
+      } else if (contract) {
+        await this.processContractEvent(eventType, payload, contract.id);
+      }
 
       await this.prisma.webhookEvent.update({
         where: { id: webhookEvent.id },
@@ -134,6 +141,40 @@ export class WebhooksService {
     }
 
     return { status: 200, message: 'OK' };
+  }
+
+  /** Processes v3 events received outside a CRM-created operation. */
+  private async processContractEvent(eventType: string, payload: WebhookPayload, contractId: string): Promise<void> {
+    switch (eventType) {
+      case 'DebtCreatedEvent':
+      case 'DebtUpdatedEvent':
+        if ((payload.status ?? 201) >= 200 && (payload.status ?? 201) < 300) {
+          await this.prisma.contract.update({ where: { id: contractId }, data: {
+            serasaStatus: eventType === 'DebtUpdatedEvent' || payload.status === 204 ? SerasaStatus.UPDATED : SerasaStatus.REGISTERED,
+            debtId: payload.debtId ?? payload.debtIds?.[0],
+          } });
+        } else {
+          await this.prisma.contract.update({ where: { id: contractId }, data: { serasaStatus: SerasaStatus.FAILED } });
+        }
+        break;
+      case 'DebtRemovedEvent':
+        if ((payload.status ?? 200) >= 200 && (payload.status ?? 200) < 300) {
+          await this.prisma.contract.update({ where: { id: contractId }, data: { serasaStatus: SerasaStatus.REMOVED } });
+        }
+        break;
+      case 'ClosedAgreementEvent':
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.IN_AGREEMENT } });
+        break;
+      case 'BreachedAgreementEvent':
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.AGREEMENT_BREACHED } });
+        break;
+      case 'PaidAgreementEvent':
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.PAID } });
+        break;
+      case 'PaidInstallmentEvent':
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paidInstallments: { increment: 1 } } });
+        break;
+    }
   }
 
   /**

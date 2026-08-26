@@ -158,6 +158,14 @@ export class OperationProcessor extends WorkerHost {
         where: { id: { in: items.map((i) => i.contractId) } },
         data: { serasaStatus: 'SENT' },
       });
+
+      // The v3 API returns debtIds synchronously. Persist them immediately so
+      // later webhook events can be correlated even when transactionId is absent.
+      await Promise.all(items.map((item, index) => {
+        const debtId = result.items?.[index]?.debtId;
+        if (!debtId) return Promise.resolve();
+        return this.prisma.contract.update({ where: { id: item.contractId }, data: { debtId } });
+      }));
     } else {
       // Error: mark items as FAILED
       await this.prisma.providerOperationItem.updateMany({
