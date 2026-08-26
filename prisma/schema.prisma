@@ -153,6 +153,7 @@ model Account {
   users                  User[]
   creditors              Creditor[]
   wallets                Wallet[]
+  serasaWallets          SerasaWallet[]
   contracts              Contract[]
   providers              Provider[]
   importBatches          ImportBatch[]
@@ -264,17 +265,19 @@ model Creditor {
 }
 
 model Wallet {
-  id         String       @id @default(uuid())
-  accountId  String
-  creditorId String
-  name       String
-  status     WalletStatus @default(ACTIVE)
-  deletedAt  DateTime?
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id             String       @id @default(uuid())
+  accountId      String
+  creditorId     String
+  serasaWalletId String?
+  name           String
+  status         WalletStatus @default(ACTIVE)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   account              Account               @relation(fields: [accountId], references: [id])
   creditor             Creditor              @relation(fields: [creditorId], references: [id])
+  serasaWallet         SerasaWallet?         @relation(fields: [serasaWalletId], references: [id])
   contracts            Contract[]
   importBatches        ImportBatch[]
   userScopes           UserScope[]
@@ -529,6 +532,23 @@ model WalletMapping {
   wallet   Wallet   @relation(fields: [walletId], references: [id])
 
   @@unique([providerId, walletId])
+}
+
+model SerasaWallet {
+  id               String   @id @default(uuid())
+  accountId        String
+  externalWalletId String
+  name             String
+  criteria         String?  @db.Text
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  account    Account  @relation(fields: [accountId], references: [id])
+  crmWallets Wallet[]
+
+  @@unique([accountId, externalWalletId])
+  @@index([accountId])
 }
 
 model ProviderOperation {

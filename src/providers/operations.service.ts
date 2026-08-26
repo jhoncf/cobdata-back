@@ -196,6 +196,50 @@ export class OperationsService {
     };
   }
 
+  /** Queues one eligible contract for inclusion/update in the linked Serasa wallet. */
+  async createForContract(contractId: string, userId: string, accountId: string) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: contractId, accountId, deletedAt: null, status: ContractStatus.ACTIVE },
+    });
+    if (!contract) throw new NotFoundException('Contrato não encontrado');
+    if (!ELIGIBLE_FOR_CREATE.includes(contract.serasaStatus)) {
+      throw new ConflictException('Este contrato já está sincronizado ou não é elegível para envio à Serasa');
+    }
+
+    const mapping = await this.prisma.walletMapping.findFirst({
+      where: { walletId: contract.walletId },
+      include: { provider: true },
+    });
+    if (!mapping || mapping.provider.type !== 'SERASA_LNOP') {
+      throw new UnprocessableEntityException('A carteira CRM não possui uma carteira Serasa vinculada');
+    }
+
+    const operation = await this.prisma.$transaction(async (tx) => {
+      const op = await tx.providerOperation.create({
+        data: {
+          accountId,
+          providerId: mapping.providerId,
+          walletId: contract.walletId,
+          userId,
+          action: OperationAction.CREATE_OR_UPDATE,
+          status: OperationStatus.PENDING,
+          totalItems: 1,
+        },
+      });
+      await tx.providerOperationItem.create({
+        data: { operationId: op.id, contractId: contract.id, batchIndex: 0, status: OperationItemStatus.PENDING },
+      });
+      return op;
+    });
+
+    await this.operationQueue.add(
+      `operation-contract-${operation.id}`,
+      { operationId: operation.id, batchIndex: 0, providerId: mapping.providerId, action: OperationAction.CREATE_OR_UPDATE },
+      { attempts: 1 },
+    );
+    return { id: operation.id, status: operation.status, contractId: contract.id };
+  }
+
   /**
    * Lists operations with pagination and scope filtering.
    */

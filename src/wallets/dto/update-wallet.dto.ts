@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, MaxLength, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength, IsOptional, IsIn, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -15,4 +15,9 @@ export class UpdateWalletDto {
   @IsOptional()
   @IsIn(['ACTIVE', 'INACTIVE'])
   status?: 'ACTIVE' | 'INACTIVE';
+
+  @ApiPropertyOptional({ nullable: true, description: 'Carteira Serasa vinculada; envie null para desvincular' })
+  @IsOptional()
+  @IsUUID()
+  serasaWalletId?: string | null;
 }

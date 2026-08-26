@@ -47,6 +47,18 @@ export class OperationsController {
     });
   }
 
+  @Post('contracts/:contractId/sync')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: 'CONTRACT_SYNC_SERASA', resourceType: 'Contract' })
+  @ApiOperation({ summary: 'Synchronize one contract with Serasa' })
+  async createForContract(
+    @Param('contractId', ParseUUIDPipe) contractId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.operationsService.createForContract(contractId, user.id, user.accountId);
+  }
+
   @Get()
   @Roles('ADMIN', 'OPERATIONAL', 'VIEWER')
   @ApiOperation({ summary: 'List operations', description: 'Paginated list of provider operations with optional filters' })

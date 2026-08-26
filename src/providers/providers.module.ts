@@ -11,13 +11,15 @@ import { WebhooksController } from './webhooks.controller';
 import { WebhooksService } from './webhooks.service';
 import { SerasaLnopAdapter } from './adapters/serasa-lnop.adapter';
 import { CryptoService } from './crypto.service';
+import { SerasaWalletsController } from './serasa-wallets.controller';
+import { SerasaWalletsService } from './serasa-wallets.service';
 import { QUEUES } from '../common/constants/queues';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: QUEUES.PROVIDER_OPERATION }),
   ],
-  controllers: [ProvidersController, WalletMappingsController, OperationsController, WebhooksController],
+  controllers: [ProvidersController, WalletMappingsController, OperationsController, WebhooksController, SerasaWalletsController],
   providers: [
     ProvidersService,
     WalletMappingsService,
@@ -26,7 +28,8 @@ import { QUEUES } from '../common/constants/queues';
     WebhooksService,
     SerasaLnopAdapter,
     CryptoService,
+    SerasaWalletsService,
   ],
-  exports: [ProvidersService, WalletMappingsService, OperationsService, SerasaLnopAdapter, WebhooksService],
+  exports: [ProvidersService, WalletMappingsService, OperationsService, SerasaLnopAdapter, WebhooksService, SerasaWalletsService],
 })
 export class ProvidersModule {}

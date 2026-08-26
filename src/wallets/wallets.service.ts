@@ -10,6 +10,7 @@ import { UpdateWalletDto } from './dto/update-wallet.dto';
 import { ListWalletsQueryDto } from './dto/list-wallets-query.dto';
 import { PaginatedResponse } from '../common/dto';
 import { Wallet } from '@prisma/client';
+import { SerasaWalletsService } from '../providers/serasa-wallets.service';
 
 export interface WalletSummary {
   totalContracts: number;
@@ -19,7 +20,10 @@ export interface WalletSummary {
 
 @Injectable()
 export class WalletsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly serasaWallets: SerasaWalletsService,
+  ) {}
 
   async create(
     creditorId: string,
@@ -34,7 +38,7 @@ export class WalletsService {
       throw new NotFoundException('Creditor not found');
     }
 
-    return this.prisma.wallet.create({
+    const wallet = await this.prisma.wallet.create({
       data: {
         accountId,
         creditorId,
@@ -42,6 +46,10 @@ export class WalletsService {
         status: 'ACTIVE',
       },
     });
+    if (dto.serasaWalletId) {
+      await this.serasaWallets.linkCrmWallet(wallet.id, dto.serasaWalletId, accountId);
+    }
+    return wallet;
   }
 
   async list(
@@ -139,10 +147,14 @@ export class WalletsService {
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.status !== undefined) data.status = dto.status;
 
-    return this.prisma.wallet.update({
+    const updated = await this.prisma.wallet.update({
       where: { id },
       data,
     });
+    if (dto.serasaWalletId !== undefined) {
+      await this.serasaWallets.linkCrmWallet(id, dto.serasaWalletId, accountId);
+    }
+    return updated;
   }
 
   async softDelete(id: string, accountId: string): Promise<void> {
