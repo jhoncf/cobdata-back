@@ -9,12 +9,14 @@ import { CreateWalletDto } from './dto/create-wallet.dto';
 import { UpdateWalletDto } from './dto/update-wallet.dto';
 import { ListWalletsQueryDto } from './dto/list-wallets-query.dto';
 import { PaginatedResponse } from '../common/dto';
-import { Wallet } from '@prisma/client';
+import { Prisma, Wallet } from '@prisma/client';
 import { SerasaWalletsService } from '../providers/serasa-wallets.service';
 
 export interface WalletSummary {
   totalContracts: number;
   contractsByPaymentStatus: Record<string, number>;
+  paymentStatusTotals: Record<string, { count: number; amount: number }>;
+  serasaTotal: { count: number; amount: number };
   totalValue: number;
 }
 
@@ -186,27 +188,43 @@ export class WalletsService {
   }
 
   async getWalletSummary(walletId: string): Promise<WalletSummary> {
-    const [statusCounts, valueAgg] = await Promise.all([
-      this.prisma.contract.groupBy({
-        by: ['paymentStatus'],
-        where: { walletId, deletedAt: null },
-        _count: { _all: true },
-      }),
-      this.prisma.contract.aggregate({
-        where: { walletId, deletedAt: null },
-        _count: { _all: true },
-        _sum: { originalValue: true },
-      }),
+    const [statusTotals, overall] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
+        SELECT "paymentStatus" AS status,
+               COUNT(*)::bigint AS count,
+               COALESCE(SUM(COALESCE("updatedValue", "originalValue")), 0) AS amount
+        FROM "Contract"
+        WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL
+        GROUP BY "paymentStatus"
+      `),
+      this.prisma.$queryRaw<Array<{ totalContracts: bigint; totalValue: Prisma.Decimal; serasaCount: bigint; serasaValue: Prisma.Decimal }>>(Prisma.sql`
+        SELECT COUNT(*)::bigint AS "totalContracts",
+               COALESCE(SUM(COALESCE("updatedValue", "originalValue")), 0) AS "totalValue",
+               COUNT(*) FILTER (WHERE "serasaStatus" IN ('SENT', 'REGISTERED', 'UPDATED', 'REMOVING'))::bigint AS "serasaCount",
+               COALESCE(SUM(COALESCE("updatedValue", "originalValue")) FILTER (WHERE "serasaStatus" IN ('SENT', 'REGISTERED', 'UPDATED', 'REMOVING')), 0) AS "serasaValue"
+        FROM "Contract"
+        WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL
+      `),
     ]);
 
     const contractsByPaymentStatus: Record<string, number> = {};
-    for (const group of statusCounts) {
-      contractsByPaymentStatus[group.paymentStatus] = group._count._all;
+    const paymentStatusTotals: Record<string, { count: number; amount: number }> = {};
+    for (const group of statusTotals) {
+      const count = Number(group.count);
+      contractsByPaymentStatus[group.status] = count;
+      paymentStatusTotals[group.status] = { count, amount: Number(group.amount) };
     }
 
-    const totalContracts = valueAgg._count._all;
-    const totalValue = Number(valueAgg._sum.originalValue || 0);
+    const result = overall[0] ?? { totalContracts: BigInt(0), totalValue: new Prisma.Decimal(0), serasaCount: BigInt(0), serasaValue: new Prisma.Decimal(0) };
+    const totalContracts = Number(result.totalContracts);
+    const totalValue = Number(result.totalValue);
 
-    return { totalContracts, contractsByPaymentStatus, totalValue };
+    return {
+      totalContracts,
+      contractsByPaymentStatus,
+      paymentStatusTotals,
+      serasaTotal: { count: Number(result.serasaCount), amount: Number(result.serasaValue) },
+      totalValue,
+    };
   }
 }
