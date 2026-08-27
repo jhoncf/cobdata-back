@@ -7,7 +7,7 @@ import {
   IsArray,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ContractStatus, SerasaStatus } from '@prisma/client';
+import { ContractStatus, SerasaStatus, PaymentStatus } from '@prisma/client';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
 export class ListContractsQueryDto extends PaginationDto {
@@ -26,6 +26,15 @@ export class ListContractsQueryDto extends PaginationDto {
   @IsOptional()
   @IsEnum(SerasaStatus)
   serasaStatus?: SerasaStatus;
+
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  paymentStatus?: PaymentStatus;
+
+  /** Filter contracts with an agreement in more than one installment. */
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  installmentOnly?: boolean;
 
   @IsOptional()
   @IsDateString()

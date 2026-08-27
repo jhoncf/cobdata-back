@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ProvidersController } from './providers.controller';
 import { ProvidersService } from './providers.service';
@@ -14,9 +14,11 @@ import { CryptoService } from './crypto.service';
 import { SerasaWalletsController } from './serasa-wallets.controller';
 import { SerasaWalletsService } from './serasa-wallets.service';
 import { QUEUES } from '../common/constants/queues';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
+    forwardRef(() => PaymentsModule),
     BullModule.registerQueue({ name: QUEUES.PROVIDER_OPERATION }),
   ],
   controllers: [ProvidersController, WalletMappingsController, OperationsController, WebhooksController, SerasaWalletsController],

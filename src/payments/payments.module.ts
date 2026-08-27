@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PaymentGatewaysController } from './payment-gateways.controller';
 import { PaymentChargesController } from './payment-charges.controller';
@@ -24,7 +24,7 @@ import { PublicDebtRateLimitService } from './public-debt-rate-limit.service';
 import { ProvidersModule } from '../providers/providers.module';
 
 @Module({
-  imports: [AuditModule, ProvidersModule, ScheduleModule.forRoot()],
+  imports: [AuditModule, forwardRef(() => ProvidersModule), ScheduleModule.forRoot()],
   controllers: [PaymentGatewaysController, PaymentChargesController, BbPixWebhookController, PublicDebtController],
   providers: [
     PaymentGatewaysService,

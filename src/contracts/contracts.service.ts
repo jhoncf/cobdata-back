@@ -312,7 +312,7 @@ export class ContractsService {
     userRole: string,
     userScopes?: string[],
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, serasaStatus, dateFrom, dateTo, debtorDocument, tags } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, dateFrom, dateTo, debtorDocument, tags } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -352,6 +352,14 @@ export class ContractsService {
 
     if (serasaStatus) {
       where.serasaStatus = serasaStatus;
+    }
+
+    if (paymentStatus) {
+      where.paymentStatus = paymentStatus;
+    }
+
+    if (installmentOnly) {
+      where.totalInstallments = { gt: 1 };
     }
 
     if (dateFrom || dateTo) {

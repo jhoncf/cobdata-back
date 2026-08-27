@@ -9,6 +9,7 @@ import {
   PaymentStatus,
   ProviderType,
 } from '@prisma/client';
+import { SettlementProcessorService } from '../payments/settlement/settlement-processor.service';
 
 export interface WebhookPayload {
   eventType?: string;
@@ -30,6 +31,7 @@ export class WebhooksService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly serasaAdapter: SerasaLnopAdapter,
+    private readonly settlementProcessor: SettlementProcessorService,
   ) {}
 
   /**
@@ -163,16 +165,18 @@ export class WebhooksService {
         }
         break;
       case 'ClosedAgreementEvent':
-        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.IN_AGREEMENT } });
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.IN_AGREEMENT, ...this.agreementProjection(payload) } });
         break;
       case 'BreachedAgreementEvent':
-        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.AGREEMENT_BREACHED } });
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.AGREEMENT_BREACHED, ...this.agreementProjection(payload) } });
         break;
       case 'PaidAgreementEvent':
-        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.PAID } });
+        await this.recordSerasaPayment(contractId, eventType, payload);
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.PAID, ...this.agreementProjection(payload) } });
         break;
       case 'PaidInstallmentEvent':
-        await this.prisma.contract.update({ where: { id: contractId }, data: { paidInstallments: { increment: 1 } } });
+        await this.recordSerasaPayment(contractId, eventType, payload);
+        await this.prisma.contract.update({ where: { id: contractId }, data: { paidInstallments: { increment: 1 }, ...this.agreementProjection(payload) } });
         break;
     }
   }
@@ -321,30 +325,79 @@ export class WebhooksService {
       case 'ClosedAgreementEvent':
         await this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { paymentStatus: PaymentStatus.IN_AGREEMENT },
+          data: { paymentStatus: PaymentStatus.IN_AGREEMENT, ...this.agreementProjection(payload) },
         });
         break;
 
       case 'BreachedAgreementEvent':
         await this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { paymentStatus: PaymentStatus.AGREEMENT_BREACHED },
+          data: { paymentStatus: PaymentStatus.AGREEMENT_BREACHED, ...this.agreementProjection(payload) },
         });
         break;
 
       case 'PaidAgreementEvent':
+        await this.recordSerasaPayment(operationItem.contractId, eventType, payload);
         await this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { paymentStatus: PaymentStatus.PAID },
+          data: { paymentStatus: PaymentStatus.PAID, ...this.agreementProjection(payload) },
         });
         break;
 
       case 'PaidInstallmentEvent':
+        await this.recordSerasaPayment(operationItem.contractId, eventType, payload);
         await this.prisma.contract.update({
           where: { id: operationItem.contractId },
-          data: { paidInstallments: { increment: 1 } },
+          data: { paidInstallments: { increment: 1 }, ...this.agreementProjection(payload) },
         });
         break;
     }
+  }
+
+  /** Normalizes agreement fields across the Serasa webhook payload variants. */
+  private agreementProjection(payload: WebhookPayload): Record<string, unknown> {
+    const agreement = this.asRecord(payload.agreement) ?? payload;
+    const reference = this.asString(agreement.agreementId ?? agreement.id ?? payload.agreementId);
+    const totalInstallments = this.asPositiveInt(agreement.totalInstallments ?? agreement.installments ?? agreement.installmentCount ?? payload.totalInstallments);
+    const totalAmount = this.asAmount(agreement.totalAmount ?? agreement.agreementValue ?? agreement.amount ?? payload.agreementTotalAmount);
+    return {
+      ...(reference ? { agreementReference: reference } : {}),
+      ...(totalInstallments ? { totalInstallments } : {}),
+      ...(totalAmount !== undefined ? { agreementTotalAmount: totalAmount } : {}),
+    };
+  }
+
+  private async recordSerasaPayment(contractId: string, eventType: string, payload: WebhookPayload): Promise<void> {
+    const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, select: { accountId: true } });
+    if (!contract || !payload.transactionId) return;
+    const payment = this.asRecord(payload.payment) ?? this.asRecord(payload.installment) ?? payload;
+    const amount = this.asAmount(payment.amount ?? payment.paidAmount ?? payload.amount ?? payload.paidAmount);
+    if (amount === undefined) return;
+    const installmentNumber = this.asPositiveInt(payment.installmentNumber ?? payment.number ?? payload.installmentNumber);
+    const projection = this.agreementProjection(payload);
+    await this.settlementProcessor.processEvent({
+      provider: 'SERASA_LNOP', eventType: eventType === 'PaidInstallmentEvent' ? 'PAID_INSTALLMENT' : 'PAID_AGREEMENT',
+      externalEventId: payload.transactionId,
+      externalTransactionId: payload.transactionId,
+      contractReference: contractId,
+      agreementReference: projection.agreementReference as string | undefined,
+      installmentNumber,
+      amount: String(amount),
+      paidAt: new Date(), status: 'CONFIRMED', providerPayload: payload as Record<string, unknown>,
+    }, contract.accountId);
+  }
+
+  private asRecord(value: unknown): Record<string, any> | null {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : null;
+  }
+  private asString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+  private asPositiveInt(value: unknown): number | undefined {
+    const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+  }
+  private asAmount(value: unknown): number | undefined {
+    const parsed = typeof value === 'string' ? Number(value.replace(',', '.')) : Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
   }
 }

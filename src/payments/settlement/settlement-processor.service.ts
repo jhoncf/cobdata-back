@@ -81,6 +81,7 @@ export class SettlementProcessorService {
       where: {
         accountId,
         OR: [
+          { id: event.contractReference },
           { contractNumber: event.contractReference },
           { debtId: event.contractReference },
         ],

@@ -433,6 +433,9 @@ model Contract {
   paymentStatus           PaymentStatus  @default(OPEN)
   status                  ContractStatus @default(ACTIVE)
   debtId                  String?
+  agreementReference      String?
+  agreementTotalAmount    Decimal?       @db.Decimal(15, 2)
+  totalInstallments       Int?
   paidInstallments        Int            @default(0)
   totalPaidAmount         Decimal        @default(0) @db.Decimal(15, 2)
   lastPaymentAt           DateTime?
@@ -451,6 +454,7 @@ model Contract {
 
   @@index([walletId, serasaStatus])
   @@index([walletId, paymentStatus])
+  @@index([walletId, totalInstallments])
   @@index([walletId, status, deletedAt])
   @@index([debtorDocumentHash])
 }
