@@ -206,13 +206,30 @@ export class SerasaLnopAdapter implements ProviderAdapter {
   /** Serasa error payloads can use message, errors[] or details fields. */
   private errorMessage(errorBody: any, fallback: string): string {
     if (typeof errorBody?.message === 'string' && errorBody.message.trim()) return errorBody.message;
+    if (typeof errorBody?.error === 'string' && errorBody.error.trim()) return errorBody.error;
     if (Array.isArray(errorBody?.errors)) {
       const messages = errorBody.errors
-        .map((error: any) => typeof error === 'string' ? error : error?.message || error?.detail)
+        .map((error: any) => {
+          if (typeof error === 'string') return error;
+          if (typeof error?.message === 'string') return error.message;
+          if (typeof error?.detail === 'string') return error.detail;
+          if (Array.isArray(error?.messages)) return error.messages.join(', ');
+          return undefined;
+        })
         .filter((message: unknown): message is string => typeof message === 'string' && message.trim().length > 0);
       if (messages.length) return messages.join('; ');
     }
     if (typeof errorBody?.detail === 'string' && errorBody.detail.trim()) return errorBody.detail;
+    if (errorBody && typeof errorBody === 'object') {
+      // Preserve unfamiliar validation payloads so the failed operation can be
+      // diagnosed from the CRM without issuing another request to Serasa.
+      try {
+        const serialized = JSON.stringify(errorBody);
+        if (serialized && serialized !== '{}') return serialized.slice(0, 2_000);
+      } catch {
+        // Fall through to the HTTP status text.
+      }
+    }
     return fallback;
   }
 }
