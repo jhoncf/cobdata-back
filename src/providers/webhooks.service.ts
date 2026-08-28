@@ -260,8 +260,7 @@ export class WebhooksService {
         data: {
           status: OperationItemStatus.FAILED,
           errorCode: payload.errorCode || `HTTP_${httpStatus}`,
-          errorMessage:
-            payload.errorMessage || `Provider returned status ${httpStatus}`,
+          errorMessage: this.providerErrorMessage(payload, httpStatus),
         },
       });
 
@@ -301,12 +300,31 @@ export class WebhooksService {
         data: {
           status: OperationItemStatus.FAILED,
           errorCode: payload.errorCode || `HTTP_${httpStatus}`,
-          errorMessage:
-            payload.errorMessage || `Provider returned status ${httpStatus}`,
+          errorMessage: this.providerErrorMessage(payload, httpStatus),
         },
       });
       // Contract serasaStatus stays as REMOVING (no update needed)
     }
+  }
+
+  /** Extract Serasa's validation error from its webhook payload. */
+  private providerErrorMessage(payload: WebhookPayload, httpStatus: number): string {
+    if (payload.errorMessage) return payload.errorMessage;
+    const errors = payload.error;
+    if (Array.isArray(errors)) {
+      const messages = errors
+        .map((error) => {
+          if (typeof error === 'string') return error;
+          if (error && typeof error === 'object' && 'message' in error) {
+            const message = (error as { message?: unknown }).message;
+            return typeof message === 'string' ? message : undefined;
+          }
+          return undefined;
+        })
+        .filter((message): message is string => typeof message === 'string' && message.trim().length > 0);
+      if (messages.length) return messages.join('; ');
+    }
+    return `Provider returned status ${httpStatus}`;
   }
 
   /**
