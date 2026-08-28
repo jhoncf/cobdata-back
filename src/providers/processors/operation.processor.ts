@@ -181,6 +181,13 @@ export class OperationProcessor extends WorkerHost {
           lastAttemptAt: new Date(),
         },
       });
+
+      // The list is optimistically changed to SENT when the operation is
+      // queued. Revert that projection when Serasa rejects the request.
+      await this.prisma.contract.updateMany({
+        where: { id: { in: items.map((i) => i.contractId) } },
+        data: { serasaStatus: 'FAILED' },
+      });
     }
   }
 

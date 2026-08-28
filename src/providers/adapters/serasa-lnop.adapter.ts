@@ -190,7 +190,7 @@ export class SerasaLnopAdapter implements ProviderAdapter {
         httpStatus,
         error: {
           code: errorBody?.code || `HTTP_${httpStatus}`,
-          message: errorBody?.message || response.statusText,
+          message: this.errorMessage(errorBody, response.statusText),
         },
       };
     } catch (error) {
@@ -201,5 +201,18 @@ export class SerasaLnopAdapter implements ProviderAdapter {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Serasa error payloads can use message, errors[] or details fields. */
+  private errorMessage(errorBody: any, fallback: string): string {
+    if (typeof errorBody?.message === 'string' && errorBody.message.trim()) return errorBody.message;
+    if (Array.isArray(errorBody?.errors)) {
+      const messages = errorBody.errors
+        .map((error: any) => typeof error === 'string' ? error : error?.message || error?.detail)
+        .filter((message: unknown): message is string => typeof message === 'string' && message.trim().length > 0);
+      if (messages.length) return messages.join('; ');
+    }
+    if (typeof errorBody?.detail === 'string' && errorBody.detail.trim()) return errorBody.detail;
+    return fallback;
   }
 }
