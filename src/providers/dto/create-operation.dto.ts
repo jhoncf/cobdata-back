@@ -1,6 +1,7 @@
-import { IsEnum, IsUUID } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { OperationAction } from '@prisma/client';
+import { ContractStatus, OperationAction, PaymentStatus, SerasaStatus } from '@prisma/client';
 
 export class CreateOperationDto {
   @ApiProperty({ description: 'Wallet ID to create the operation for', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
@@ -10,4 +11,15 @@ export class CreateOperationDto {
   @ApiProperty({ description: 'Operation action type', enum: ['CREATE_OR_UPDATE', 'REMOVE'], example: 'CREATE_OR_UPDATE' })
   @IsEnum(OperationAction)
   action!: OperationAction;
+
+  @IsOptional() @IsEnum(ContractStatus) contractStatus?: ContractStatus;
+  @IsOptional() @IsEnum(SerasaStatus) serasaStatus?: SerasaStatus;
+  @IsOptional() @IsEnum(PaymentStatus) paymentStatus?: PaymentStatus;
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() installmentOnly?: boolean;
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) minOriginalValue?: number;
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) maxOriginalValue?: number;
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) minUpdatedValue?: number;
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) maxUpdatedValue?: number;
+  @IsOptional() @IsDateString() dateFrom?: string;
+  @IsOptional() @IsDateString() dateTo?: string;
 }

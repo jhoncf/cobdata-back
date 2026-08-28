@@ -15,6 +15,7 @@ import {
   OperationItemStatus,
   ContractStatus,
   SerasaStatus,
+  PaymentStatus,
 } from '@prisma/client';
 
 const BATCH_SIZE = 1000;
@@ -39,6 +40,20 @@ export interface CreateOperationParams {
   action: OperationAction;
   userId: string;
   accountId: string;
+  filters?: OperationContractFilters;
+}
+
+export interface OperationContractFilters {
+  contractStatus?: ContractStatus;
+  serasaStatus?: SerasaStatus;
+  paymentStatus?: PaymentStatus;
+  installmentOnly?: boolean;
+  minOriginalValue?: number;
+  maxOriginalValue?: number;
+  minUpdatedValue?: number;
+  maxUpdatedValue?: number;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface OperationBatchJobData {
@@ -62,7 +77,7 @@ export class OperationsService {
    * Preview eligible contracts for a provider operation without creating one.
    * Returns count and batch information.
    */
-  async preview(walletId: string, action: OperationAction, accountId: string) {
+  async preview(walletId: string, action: OperationAction, accountId: string, filters: OperationContractFilters = {}) {
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: walletId, accountId, deletedAt: null },
     });
@@ -83,7 +98,7 @@ export class OperationsService {
     }
 
     const eligibleStatuses = this.getEligibleStatuses(action);
-    const contracts = await this.selectEligibleContracts(walletId, action, eligibleStatuses);
+    const contracts = await this.selectEligibleContracts(walletId, action, eligibleStatuses, filters);
 
     return {
       walletId,
@@ -98,7 +113,7 @@ export class OperationsService {
    * dividing into batches, and scheduling BullMQ jobs.
    */
   async create(params: CreateOperationParams) {
-    const { walletId, action, userId, accountId } = params;
+    const { walletId, action, userId, accountId, filters = {} } = params;
 
     // Validate wallet exists and has an active provider mapping
     const wallet = await this.prisma.wallet.findFirst({
@@ -132,6 +147,7 @@ export class OperationsService {
       walletId,
       action,
       eligibleStatuses,
+      filters,
     );
 
     if (eligibleContracts.length === 0) {
@@ -537,6 +553,7 @@ export class OperationsService {
     walletId: string,
     action: OperationAction,
     eligibleStatuses: SerasaStatus[],
+    filters: OperationContractFilters = {},
   ) {
     const where: any = {
       walletId,
@@ -548,6 +565,34 @@ export class OperationsService {
     // For REMOVE, debtId must exist
     if (action === OperationAction.REMOVE) {
       where.debtId = { not: null };
+    } else {
+      where.paymentStatus = { not: PaymentStatus.PAID };
+    }
+
+    if (filters.contractStatus && filters.contractStatus !== ContractStatus.ACTIVE) return Promise.resolve([]);
+    if (filters.serasaStatus) {
+      if (!eligibleStatuses.includes(filters.serasaStatus)) return Promise.resolve([]);
+      where.serasaStatus = filters.serasaStatus;
+    }
+    if (filters.paymentStatus) where.paymentStatus = filters.paymentStatus;
+    if (filters.installmentOnly) where.totalInstallments = { gt: 1 };
+    if (filters.minOriginalValue !== undefined || filters.maxOriginalValue !== undefined) {
+      where.originalValue = {
+        ...(filters.minOriginalValue !== undefined ? { gte: filters.minOriginalValue } : {}),
+        ...(filters.maxOriginalValue !== undefined ? { lte: filters.maxOriginalValue } : {}),
+      };
+    }
+    if (filters.minUpdatedValue !== undefined || filters.maxUpdatedValue !== undefined) {
+      where.updatedValue = {
+        ...(filters.minUpdatedValue !== undefined ? { gte: filters.minUpdatedValue } : {}),
+        ...(filters.maxUpdatedValue !== undefined ? { lte: filters.maxUpdatedValue } : {}),
+      };
+    }
+    if (filters.dateFrom || filters.dateTo) {
+      where.occurrenceDate = {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+      };
     }
 
     return this.prisma.contract.findMany({

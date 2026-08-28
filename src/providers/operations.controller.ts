@@ -44,6 +44,7 @@ export class OperationsController {
       action: dto.action,
       userId: user.id,
       accountId: user.accountId,
+      filters: dto,
     });
   }
 
@@ -98,7 +99,7 @@ export class OperationsController {
     @Query() query: PreviewOperationDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.operationsService.preview(query.walletId, query.action, user.accountId);
+    return this.operationsService.preview(query.walletId, query.action, user.accountId, query);
   }
 
   @Get(':id/items')

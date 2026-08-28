@@ -312,7 +312,7 @@ export class ContractsService {
     userRole: string,
     userScopes?: string[],
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, dateFrom, dateTo, debtorDocument, tags } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, dateFrom, dateTo, debtorDocument, tags } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -360,6 +360,20 @@ export class ContractsService {
 
     if (installmentOnly) {
       where.totalInstallments = { gt: 1 };
+    }
+
+    if (minOriginalValue !== undefined || maxOriginalValue !== undefined) {
+      where.originalValue = {
+        ...(minOriginalValue !== undefined ? { gte: minOriginalValue } : {}),
+        ...(maxOriginalValue !== undefined ? { lte: maxOriginalValue } : {}),
+      };
+    }
+
+    if (minUpdatedValue !== undefined || maxUpdatedValue !== undefined) {
+      where.updatedValue = {
+        ...(minUpdatedValue !== undefined ? { gte: minUpdatedValue } : {}),
+        ...(maxUpdatedValue !== undefined ? { lte: maxUpdatedValue } : {}),
+      };
     }
 
     if (dateFrom || dateTo) {
