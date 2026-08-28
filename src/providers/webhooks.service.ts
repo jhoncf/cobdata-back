@@ -165,7 +165,7 @@ export class WebhooksService {
         }
         break;
       case 'ClosedAgreementEvent':
-        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.IN_AGREEMENT, ...this.agreementProjection(payload) } });
+        await this.updateAgreementStatus(contractId, payload);
         break;
       case 'BreachedAgreementEvent':
         await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.AGREEMENT_BREACHED, ...this.agreementProjection(payload) } });
@@ -176,7 +176,7 @@ export class WebhooksService {
         break;
       case 'PaidInstallmentEvent':
         await this.recordSerasaPayment(contractId, eventType, payload);
-        await this.prisma.contract.update({ where: { id: contractId }, data: { paidInstallments: { increment: 1 }, ...this.agreementProjection(payload) } });
+        await this.markInstallmentPaid(contractId, payload);
         break;
     }
   }
@@ -341,10 +341,7 @@ export class WebhooksService {
   ): Promise<void> {
     switch (eventType) {
       case 'ClosedAgreementEvent':
-        await this.prisma.contract.update({
-          where: { id: operationItem.contractId },
-          data: { paymentStatus: PaymentStatus.IN_AGREEMENT, ...this.agreementProjection(payload) },
-        });
+        await this.updateAgreementStatus(operationItem.contractId, payload);
         break;
 
       case 'BreachedAgreementEvent':
@@ -364,10 +361,7 @@ export class WebhooksService {
 
       case 'PaidInstallmentEvent':
         await this.recordSerasaPayment(operationItem.contractId, eventType, payload);
-        await this.prisma.contract.update({
-          where: { id: operationItem.contractId },
-          data: { paidInstallments: { increment: 1 }, ...this.agreementProjection(payload) },
-        });
+        await this.markInstallmentPaid(operationItem.contractId, payload);
         break;
     }
   }
@@ -376,7 +370,14 @@ export class WebhooksService {
   private agreementProjection(payload: WebhookPayload): Record<string, unknown> {
     const agreement = this.asRecord(payload.agreement) ?? payload;
     const reference = this.asString(agreement.agreementId ?? agreement.id ?? payload.agreementId);
-    const totalInstallments = this.asPositiveInt(agreement.totalInstallments ?? agreement.installments ?? agreement.installmentCount ?? payload.totalInstallments);
+    const totalInstallments = this.asPositiveInt(
+      agreement.totalInstallments
+      ?? agreement.installmentsAmount
+      ?? agreement.installments
+      ?? agreement.installmentCount
+      ?? payload.totalInstallments
+      ?? payload.installmentsAmount,
+    );
     const totalAmount = this.asAmount(agreement.totalAmount ?? agreement.agreementValue ?? agreement.amount ?? payload.agreementTotalAmount);
     return {
       ...(reference ? { agreementReference: reference } : {}),
@@ -403,6 +404,45 @@ export class WebhooksService {
       amount: String(amount),
       paidAt: new Date(), status: 'CONFIRMED', providerPayload: payload as Record<string, unknown>,
     }, contract.accountId);
+  }
+
+  /** Saves a new agreement and distinguishes a one-off agreement from installments. */
+  private async updateAgreementStatus(contractId: string, payload: WebhookPayload): Promise<void> {
+    const projection = this.agreementProjection(payload);
+    const totalInstallments = projection.totalInstallments as number | undefined;
+    await this.prisma.contract.update({
+      where: { id: contractId },
+      data: {
+        paymentStatus: totalInstallments && totalInstallments > 1
+          ? PaymentStatus.INSTALLMENT
+          : PaymentStatus.IN_AGREEMENT,
+        ...projection,
+      },
+    });
+  }
+
+  /** Uses Serasa's installment number when supplied, avoiding double-counting retries. */
+  private async markInstallmentPaid(contractId: string, payload: WebhookPayload): Promise<void> {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { paidInstallments: true, paymentStatus: true },
+    });
+    if (!contract) return;
+    const payment = this.asRecord(payload.payment) ?? this.asRecord(payload.installment) ?? payload;
+    const installmentNumber = this.asPositiveInt(payment.installmentNumber ?? payment.number ?? payload.installmentNumber);
+    const paidInstallments = installmentNumber
+      ? Math.max(contract.paidInstallments, installmentNumber)
+      : contract.paidInstallments + 1;
+    await this.prisma.contract.update({
+      where: { id: contractId },
+      data: {
+        paymentStatus: contract.paymentStatus === PaymentStatus.IN_AGREEMENT
+          ? PaymentStatus.IN_AGREEMENT
+          : PaymentStatus.INSTALLMENT,
+        paidInstallments,
+        ...this.agreementProjection(payload),
+      },
+    });
   }
 
   private asRecord(value: unknown): Record<string, any> | null {
