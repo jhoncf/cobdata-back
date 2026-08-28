@@ -105,7 +105,7 @@ export class ContractsService {
       if (existingContract.walletId === dto.walletId) {
         const updateData: any = {
           debtorDocument: dto.debtorDocument,
-          debtorName: dto.debtorName,
+          ...(dto.debtorName !== undefined ? { debtorName: dto.debtorName } : {}),
           debtorDocumentHash,
           contractNumber: dto.contractNumber,
           debtType: dto.debtType,
@@ -164,7 +164,7 @@ export class ContractsService {
         accountId,
         walletId: dto.walletId,
         debtorDocument: dto.debtorDocument,
-        debtorName: dto.debtorName,
+        debtorName: dto.debtorName ?? '',
         debtorDocumentHash,
         contractNumber: dto.contractNumber,
         debtType: dto.debtType,

@@ -30,10 +30,11 @@ export class CreateContractDto {
   })
   debtorDocument!: string;
 
-  @ApiProperty({ description: 'Debtor name (max 200 chars)', example: 'João da Silva', maxLength: 200 })
+  @ApiPropertyOptional({ description: 'Debtor name (max 200 chars)', example: 'João da Silva', maxLength: 200 })
+  @IsOptional()
   @IsString()
   @MaxLength(200)
-  debtorName!: string;
+  debtorName?: string;
 
   @ApiProperty({ description: 'Contract number (max 100 chars)', example: 'CONTR-2024-001', maxLength: 100 })
   @IsString()

@@ -70,6 +70,7 @@ export class OperationProcessor extends WorkerHost {
               updatedValue: true,
               debtOrigin: true,
               debtId: true,
+              wallet: { select: { creditor: { select: { name: true } } } },
             },
           },
         },
@@ -132,7 +133,9 @@ export class OperationProcessor extends WorkerHost {
         debtType: item.contract.debtType,
         occurrenceDate: item.contract.occurrenceDate.toISOString().slice(0, 10),
         debtValue: Number(item.contract.updatedValue ?? item.contract.originalValue),
-        debtOrigin: item.contract.debtOrigin || undefined,
+        // For Serasa, debt origin identifies the creditor. Import source
+        // (for example, "Portal Serasa") must never be sent as the origin.
+        debtOrigin: item.contract.wallet?.creditor?.name || item.contract.debtOrigin || undefined,
       };
     });
 
