@@ -21,7 +21,7 @@ export class LigueLeadService {
     try {
       const response = await fetch(`${this.config.get<string>('LIGUELEAD_API_URL')}${path}`, { ...init, headers: { ...this.credentials(), ...init.headers }, signal: controller.signal });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new BadGatewayException(body?.message || 'Falha na comunicação com a LigueLead');
+      if (!response.ok) throw new BadGatewayException(body?.message || body?.error || 'Falha na comunicação com a LigueLead');
       return body;
     } catch (error) {
       if (error instanceof BadGatewayException || error instanceof ServiceUnavailableException) throw error;
@@ -186,7 +186,9 @@ export class LigueLeadService {
     const url = new URL(baseUrl);
     url.searchParams.set('cpf', debtorDocument.replace(/\D/g, ''));
     url.searchParams.set('contract', contractId);
-    return `${message.trim()} ${url.toString()}`.trim();
+    // The provider rejects the word "Pix" in SMS content. Keep the payment
+    // link intact while using neutral wording that is accepted for delivery.
+    return `${message.trim()} ${url.toString()}`.trim().replace(/\bpix\b/gi, 'pagamento');
   }
 
   private spellDigits(value: string) {
