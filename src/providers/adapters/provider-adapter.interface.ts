@@ -8,7 +8,11 @@ export interface DebtPayload {
   debtType: string;
   occurrenceDate: string;
   debtValue: number;
-  debtOrigin?: string;
+  /** Original creditor for Serasa partners enabled as securitizers. */
+  debtOrigin?: {
+    name: string;
+    document: string;
+  };
 }
 
 export interface RemovePayload {
