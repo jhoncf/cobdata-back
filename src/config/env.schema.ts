@@ -48,6 +48,7 @@ export const envSchema = z.object({
   LIGUELEAD_APP_ID: z.string().uuid().optional(),
   LIGUELEAD_WEBHOOK_TOKEN: z.string().min(32).optional(),
   LIGUELEAD_TIMEOUT: z.coerce.number().default(30000),
+  PUBLIC_PAYMENT_URL: z.string().url().default('https://crm.maisqpago.com.br/regularize'),
 
   // Payment - Banco do Brasil
   BB_CLIENT_ID: z.string().optional().default(''),

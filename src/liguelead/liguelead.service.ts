@@ -65,10 +65,19 @@ export class LigueLeadService {
   async sendSms(walletId: string, accountId: string, userId: string, dto: SendLigueLeadSmsDto, scopes?: string[]) {
     await this.wallet(walletId, accountId, scopes);
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
-    const remote = await this.request('/v1/sms', { method: 'POST', body: JSON.stringify({ title: dto.title, message: dto.message, phones: contracts.map(c => c.debtorPhone) }) });
-    const externalId = remote?.data?.campaign_id ?? remote?.campaign_id;
+    // Each contract receives a unique link. Sending separately prevents one
+    // debtor from receiving another debtor's payment link in a batch campaign.
+    const dispatchedContracts = await Promise.all(contracts.map(async (contract) => {
+      const message = this.smsMessageWithPaymentLink(dto.message, contract.id, contract.debtorDocument);
+      if (message.length > 1600) throw new BadRequestException('A mensagem de SMS, incluindo o link de pagamento, excede 1600 caracteres');
+      const remote = await this.request('/v1/sms', {
+        method: 'POST',
+        body: JSON.stringify({ title: dto.title, message, phones: [this.normalizePhone(contract.debtorPhone!)] }),
+      });
+      return { ...contract, externalCampaignId: remote?.data?.campaign_id ?? remote?.campaign_id };
+    }));
     return this.createDispatchWithInteractions({
-      accountId, walletId, userId, type: 'SMS', title: dto.title, externalId, channel: 'SMS', contracts,
+      accountId, walletId, userId, type: 'SMS', title: dto.title, channel: 'SMS', contracts: dispatchedContracts,
     });
   }
 
@@ -104,13 +113,13 @@ export class LigueLeadService {
 
   private async createDispatchWithInteractions({ accountId, walletId, userId, type, title, externalId, channel, contracts }: {
     accountId: string; walletId: string; userId: string; type: 'SMS' | 'AI_CALL'; title: string; externalId?: string;
-    channel: 'SMS' | 'AI_VOICE_CALL'; contracts: Array<{ id: string; debtorPhone: string | null }>;
+    channel: 'SMS' | 'AI_VOICE_CALL'; contracts: Array<{ id: string; debtorPhone: string | null; externalCampaignId?: string }>;
   }) {
     return this.prisma.$transaction(async (tx) => {
       const dispatch = await tx.ligueLeadDispatch.create({
         data: {
           accountId, walletId, userId, type, title, externalId, totalItems: contracts.length,
-          items: { create: contracts.map((contract) => ({ contractId: contract.id, phone: this.normalizePhone(contract.debtorPhone!), externalCampaignId: externalId })) },
+          items: { create: contracts.map((contract) => ({ contractId: contract.id, phone: this.normalizePhone(contract.debtorPhone!), externalCampaignId: contract.externalCampaignId ?? externalId })) },
         },
       });
       await tx.contractInteraction.createMany({
@@ -121,7 +130,7 @@ export class LigueLeadService {
           channel,
           status: 'QUEUED',
           provider: 'LIGUELEAD',
-          externalId,
+          externalId: contract.externalCampaignId ?? externalId,
           contact: this.normalizePhone(contract.debtorPhone!),
           summary: type === 'SMS' ? 'SMS enviado para processamento' : 'Ligação com IA enviada para processamento',
         })),
@@ -171,6 +180,14 @@ export class LigueLeadService {
   }
 
   private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
+
+  private smsMessageWithPaymentLink(message: string, contractId: string, debtorDocument: string) {
+    const baseUrl = this.config.get<string>('PUBLIC_PAYMENT_URL')!;
+    const url = new URL(baseUrl);
+    url.searchParams.set('cpf', debtorDocument.replace(/\D/g, ''));
+    url.searchParams.set('contract', contractId);
+    return `${message.trim()} ${url.toString()}`.trim();
+  }
 
   private spellDigits(value: string) {
     return value.replace(/\D/g, '').split('').join(' ');
