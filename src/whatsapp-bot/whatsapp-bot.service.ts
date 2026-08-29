@@ -59,23 +59,13 @@ export class WhatsAppBotService {
     }
 
     if (cpf) {
-      await this.prisma.whatsAppBotConversation.update({ where: { id: conversation.id }, data: { debtorDocumentEncrypted: this.crypto.encrypt(cpf), contracts: undefined, state: 'AWAITING_NAME' } });
-      return ['Agora informe seu nome completo para confirmar a consulta.'];
+      return this.lookup(conversation, cpf);
     }
     if (conversation.state === 'AWAITING_CPF') {
       if (normalized === '1' || /divida|pendencia|consult/.test(normalized)) return ['Informe seu CPF com 11 números.'];
       if (normalized === '2' || /cobcom|soluc/.test(normalized)) return [this.about()];
       return [this.welcome()];
     }
-    if (conversation.state === 'AWAITING_NAME' && conversation.debtorDocumentEncrypted) {
-      const cpfFromSession = this.crypto.decrypt(conversation.debtorDocumentEncrypted);
-      const identity = await this.prisma.contract.findFirst({ where: { accountId: this.config.getOrThrow<string>('WHATSAPP_BOT_ACCOUNT_ID'), debtorDocument: cpfFromSession, status: 'ACTIVE', paymentStatus: { not: 'PAID' }, deletedAt: null }, select: { debtorName: true } });
-      const words = normalized.split(' ').filter(Boolean);
-      const expected = identity?.debtorName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() ?? '';
-      if (!identity || words.length < 2 || !words.every((word) => expected.includes(word))) return ['Não consegui confirmar o nome informado. Digite seu nome completo novamente.'];
-      return this.lookup(conversation, cpfFromSession);
-    }
-
     if (conversation.state === 'AWAITING_ACTION' && conversation.debtorDocumentEncrypted) {
       const debts = (conversation.contracts ?? []) as Debt[];
       const option = this.option(message, debts.length);
