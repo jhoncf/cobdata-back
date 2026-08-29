@@ -53,7 +53,10 @@ export class WhatsAppBotService {
   private async reply(conversation: any, message: string, messageId: string): Promise<string[]> {
     const cpf = this.extractCpf(message);
     const normalized = message.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-    if (['menu', 'inicio', 'olá', 'ola', 'oi'].includes(normalized)) return [this.welcome()];
+    if (['menu', 'inicio', 'olá', 'ola', 'oi'].includes(normalized)) {
+      await this.prisma.whatsAppBotConversation.update({ where: { id: conversation.id }, data: { state: 'AWAITING_CPF', debtorDocumentEncrypted: null, contracts: undefined } });
+      return [this.welcome()];
+    }
 
     if (cpf) {
       await this.prisma.whatsAppBotConversation.update({ where: { id: conversation.id }, data: { debtorDocumentEncrypted: this.crypto.encrypt(cpf), contracts: undefined, state: 'AWAITING_NAME' } });
