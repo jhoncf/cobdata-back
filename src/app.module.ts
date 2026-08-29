@@ -17,6 +17,7 @@ import { HealthModule } from './health/health.module';
 import { SearchModule } from './search/search.module';
 import { LigueLeadModule } from './liguelead/liguelead.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { WhatsAppBotModule } from './whatsapp-bot/whatsapp-bot.module';
 import { JwtAuthGuard, RolesGuard, ScopeGuard, MustResetPasswordGuard } from './common/guards';
 import { AuditInterceptor } from './common/interceptors';
 import { RequestIdMiddleware } from './common/middleware';
@@ -59,6 +60,7 @@ import { QUEUES } from './common/constants/queues';
     SearchModule,
     LigueLeadModule,
     IntegrationsModule,
+    WhatsAppBotModule,
   ],
   controllers: [],
   providers: [

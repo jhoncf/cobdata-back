@@ -137,6 +137,11 @@ enum InteractionStatus {
   REJECTED
 }
 
+enum WhatsAppBotState {
+  AWAITING_CPF
+  AWAITING_ACTION
+}
+
 enum ApiKeyScope {
   CONTRACTS_READ
   CONTRACT_CONTACTS_WRITE
@@ -151,22 +156,23 @@ model Account {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                  User[]
-  creditors              Creditor[]
-  wallets                Wallet[]
-  serasaWallets          SerasaWallet[]
-  contracts              Contract[]
-  providers              Provider[]
-  importBatches          ImportBatch[]
-  providerOperations     ProviderOperation[]
-  paymentGateways        PaymentGateway[]
-  paymentCharges         PaymentCharge[]
-  paymentSettlements     PaymentSettlement[]
-  ligueLeadAgents        LigueLeadWalletAgent[]
-  ligueLeadDispatches    LigueLeadDispatch[]
-  ligueLeadWebhookEvents LigueLeadWebhookEvent[]
-  contractInteractions   ContractInteraction[]
-  apiKeys                ApiKey[]
+  users                    User[]
+  creditors                Creditor[]
+  wallets                  Wallet[]
+  serasaWallets            SerasaWallet[]
+  contracts                Contract[]
+  providers                Provider[]
+  importBatches            ImportBatch[]
+  providerOperations       ProviderOperation[]
+  paymentGateways          PaymentGateway[]
+  paymentCharges           PaymentCharge[]
+  paymentSettlements       PaymentSettlement[]
+  whatsAppBotConversations WhatsAppBotConversation[]
+  ligueLeadAgents          LigueLeadWalletAgent[]
+  ligueLeadDispatches      LigueLeadDispatch[]
+  ligueLeadWebhookEvents   LigueLeadWebhookEvent[]
+  contractInteractions     ContractInteraction[]
+  apiKeys                  ApiKey[]
 }
 
 model ApiKey {
@@ -399,6 +405,33 @@ model ContractInteraction {
   @@index([contractId, occurredAt])
   @@index([walletId, channel, status])
   @@index([provider, externalId])
+}
+
+model WhatsAppBotConversation {
+  id                      String           @id @default(uuid())
+  accountId               String
+  conversationKey         String           @unique
+  chatwootConversationId  String?          @unique
+  debtorDocumentEncrypted String?
+  contracts               Json?
+  state                   WhatsAppBotState @default(AWAITING_CPF)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  account  Account              @relation(fields: [accountId], references: [id])
+  messages WhatsAppBotMessage[]
+
+  @@index([accountId, updatedAt])
+}
+
+model WhatsAppBotMessage {
+  id                String   @id @default(uuid())
+  conversationId    String
+  externalMessageId String   @unique
+  response          String
+  createdAt         DateTime @default(now())
+
+  conversation WhatsAppBotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 }
 
 model Contract {

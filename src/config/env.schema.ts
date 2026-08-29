@@ -50,6 +50,16 @@ export const envSchema = z.object({
   LIGUELEAD_TIMEOUT: z.coerce.number().default(30000),
   PUBLIC_PAYMENT_URL: z.string().url().default('https://crm.maisqpago.com.br/regularize'),
 
+  // WhatsApp / Chatwoot bot
+  CHATWOOT_API_URL: z.string().url().optional(),
+  CHATWOOT_API_ACCESS_TOKEN: z.string().optional().default(''),
+  CHATWOOT_ACCOUNT_ID: z.string().optional().default('1'),
+  CHATWOOT_INBOX_ID: z.string().optional().default(''),
+  WHATSAPP_BOT_ACCOUNT_ID: z.string().uuid().default('00000000-0000-0000-0000-000000000001'),
+  CHATWOOT_WEBHOOK_TOKEN: z.string().min(32).optional(),
+  BEDROCK_REGION: z.string().default('us-east-1'),
+  BEDROCK_CHAT_MODEL_ID: z.string().default('us.amazon.nova-2-lite-v1:0'),
+
   // Payment - Banco do Brasil
   BB_CLIENT_ID: z.string().optional().default(''),
   BB_CLIENT_SECRET: z.string().optional().default(''),
