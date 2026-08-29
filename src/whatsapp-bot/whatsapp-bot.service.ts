@@ -157,7 +157,7 @@ export class WhatsAppBotService {
     return [`Detalhes da pendência:\n\nCredor: ${contract.wallet.creditor.name}\nCNPJ: ${contract.wallet.creditor.cnpj ?? 'não informado'}\nContrato: ${contract.contractNumber}\nProduto/serviço: ${contract.productName ?? 'não informado'}\nValor original: R$ ${this.money(String(original))}\nEncargos (juros e multa não discriminados): R$ ${this.money(String(updated - original))}\nValor atualizado: R$ ${this.money(String(updated))}\nVencimento: ${contract.dueDate?.toLocaleDateString('pt-BR') ?? 'não informado'}\nSituação: Em aberto.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
   }
 
-  private contacts(creditor: string, value: any) { if (!value || !Object.keys(value).length) return `Canais oficiais de ${creditor}: não informados no cadastro.`; return `Canais oficiais de ${creditor}:\n${Object.entries(value).filter(([, v]) => v).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')}`; }
+  private contacts(creditor: string, value: any) { if (!value || !Object.keys(value).length) return `Você está no canal oficial de atendimento da CobCom. Não há contatos adicionais cadastrados pela empresa credora ${creditor}.`; return `Canais oficiais de ${creditor}:\n${Object.entries(value).filter(([, v]) => v).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')}`; }
   private phoneFromConversation(conversation: any) { return conversation.conversationKey ?? ''; }
 
   private async intent(message: string): Promise<'PIX' | 'LINK' | 'UNKNOWN'> {
