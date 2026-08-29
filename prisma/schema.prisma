@@ -139,6 +139,7 @@ enum InteractionStatus {
 
 enum WhatsAppBotState {
   AWAITING_CPF
+  AWAITING_NAME
   AWAITING_ACTION
 }
 

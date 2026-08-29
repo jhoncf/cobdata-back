@@ -52,22 +52,41 @@ export class WhatsAppBotService {
 
   private async reply(conversation: any, message: string, messageId: string): Promise<string[]> {
     const cpf = this.extractCpf(message);
-    if (cpf) return this.lookup(conversation, cpf);
-
     const normalized = message.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     if (['menu', 'inicio', 'olá', 'ola', 'oi'].includes(normalized)) return [this.welcome()];
+
+    if (cpf) {
+      await this.prisma.whatsAppBotConversation.update({ where: { id: conversation.id }, data: { debtorDocumentEncrypted: this.crypto.encrypt(cpf), contracts: undefined, state: 'AWAITING_NAME' } });
+      return ['Agora informe seu nome completo para confirmar a consulta.'];
+    }
+    if (conversation.state === 'AWAITING_CPF') {
+      if (normalized === '1' || /divida|pendencia|consult/.test(normalized)) return ['Informe seu CPF com 11 números.'];
+      if (normalized === '2' || /cobcom|soluc/.test(normalized)) return [this.about()];
+      return [this.welcome()];
+    }
+    if (conversation.state === 'AWAITING_NAME' && conversation.debtorDocumentEncrypted) {
+      const cpfFromSession = this.crypto.decrypt(conversation.debtorDocumentEncrypted);
+      const identity = await this.prisma.contract.findFirst({ where: { accountId: this.config.getOrThrow<string>('WHATSAPP_BOT_ACCOUNT_ID'), debtorDocument: cpfFromSession, status: 'ACTIVE', paymentStatus: { not: 'PAID' }, deletedAt: null }, select: { debtorName: true } });
+      const words = normalized.split(' ').filter(Boolean);
+      const expected = identity?.debtorName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() ?? '';
+      if (!identity || words.length < 2 || !words.every((word) => expected.includes(word))) return ['Não consegui confirmar o nome informado. Digite seu nome completo novamente.'];
+      return this.lookup(conversation, cpfFromSession);
+    }
 
     if (conversation.state === 'AWAITING_ACTION' && conversation.debtorDocumentEncrypted) {
       const debts = (conversation.contracts ?? []) as Debt[];
       const option = this.option(message, debts.length);
       const intent = await this.intent(message);
+      const selected = debts[(option ?? 1) - 1];
+      if (/nao reconhe|não reconhe|contest/.test(normalized) && selected) return this.dispute(selected.id, this.phoneFromConversation(conversation));
+      if (/detalh|mais inform/.test(normalized) && selected) return this.details(selected.id);
       if (intent === 'LINK') return [this.landingLink(conversation.debtorDocumentEncrypted)];
       if ((intent === 'PIX' || option) && debts.length) {
         if (!option && debts.length > 1) return ['Para gerar o pagamento, informe o número da pendência desejada.'];
         return this.generatePix(conversation, debts[(option ?? 1) - 1]!, messageId);
       }
     }
-    return [this.welcome()];
+    return ['Escolha uma opção: *negociar*, *não reconheço* ou *detalhes*.'];
   }
 
   private async lookup(conversation: any, cpf: string) {
@@ -84,7 +103,7 @@ export class WhatsAppBotService {
       return `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber} — R$ ${this.money(debt.amount)}${dueDate}`;
     }).join('\n');
     return [
-      `Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola.`,
+      `Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola. Para contestar ou ver dados completos, responda *não reconheço* ou *detalhes*.`,
       this.landingLink(encrypted),
     ];
   }
@@ -113,8 +132,27 @@ export class WhatsAppBotService {
   }
 
   private welcome() {
-    return 'Olá, sou o assistente CobCom e estou realizando seu atendimento. Para consultar pendências, digite seu CPF com 11 números.';
+    return 'Olá! 👋 Seja bem-vindo à CobCom.\nSou o assistente virtual e estou aqui para ajudá-lo.\n\nComo posso ajudar hoje?\n\n1. Consultar minhas dívidas\n2. Conhecer a CobCom e nossas soluções';
   }
+
+  private about() { return 'A CobCom é especializada em gestão e recuperação de créditos por meio de tecnologia, inteligência de dados e negociação digital. Nosso time comercial entrará em contato em breve.'; }
+
+  private async dispute(contractId: string, contact: string): Promise<string[]> {
+    const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
+    if (!contract) return ['Não localizei esta pendência.'];
+    await this.prisma.contractInteraction.create({ data: { accountId: contract.accountId, walletId: contract.walletId, contractId, channel: 'WHATSAPP', status: 'ANSWERED', provider: 'chatwoot', contact, summary: 'Titular informou não reconhecer a dívida.' } });
+    return [`Registrei sua manifestação sobre o contrato ${contract.contractNumber}. A CobCom realiza a gestão da cobrança; contratação, contestação e documentos devem ser tratados diretamente com a empresa credora.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
+  }
+
+  private async details(contractId: string): Promise<string[]> {
+    const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
+    if (!contract) return ['Não localizei esta pendência.'];
+    const original = Number(contract.originalValue), updated = Number(contract.updatedValue ?? contract.originalValue);
+    return [`Detalhes da pendência:\n\nCredor: ${contract.wallet.creditor.name}\nCNPJ: ${contract.wallet.creditor.cnpj ?? 'não informado'}\nContrato: ${contract.contractNumber}\nProduto/serviço: ${contract.productName ?? 'não informado'}\nValor original: R$ ${this.money(String(original))}\nEncargos (juros e multa não discriminados): R$ ${this.money(String(updated - original))}\nValor atualizado: R$ ${this.money(String(updated))}\nVencimento: ${contract.dueDate?.toLocaleDateString('pt-BR') ?? 'não informado'}\nSituação: Em aberto.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
+  }
+
+  private contacts(creditor: string, value: any) { if (!value || !Object.keys(value).length) return `Canais oficiais de ${creditor}: não informados no cadastro.`; return `Canais oficiais de ${creditor}:\n${Object.entries(value).filter(([, v]) => v).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')}`; }
+  private phoneFromConversation(conversation: any) { return conversation.conversationKey ?? ''; }
 
   private async intent(message: string): Promise<'PIX' | 'LINK' | 'UNKNOWN'> {
     const normalized = message.toLowerCase();
