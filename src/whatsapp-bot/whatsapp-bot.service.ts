@@ -45,7 +45,12 @@ export class WhatsAppBotService {
       update: { chatwootConversationId },
     });
     const responses = await this.reply(conversation, content, messageId);
-    for (const response of responses) await this.sendToChatwoot(chatwootConversationId, response);
+    for (let index = 0; index < responses.length; index += 1) {
+      await this.sendToChatwoot(chatwootConversationId, responses[index]!);
+      // Chatwoot entrega cada saída de forma assíncrona à ponte WhatsApp.
+      // A pequena espera preserva a ordem: instrução, Pix copia e cola, link final.
+      if (index < responses.length - 1) await new Promise((resolve) => setTimeout(resolve, 800));
+    }
     await this.prisma.whatsAppBotMessage.create({ data: { conversationId: conversation.id, externalMessageId: messageId, response: responses.join('\n\n---\n\n') } });
     return { accepted: true };
   }
