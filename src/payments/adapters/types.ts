@@ -33,6 +33,10 @@ export interface IssuePaymentChargeInput {
   idempotencyKey: string;
   txid?: string; // pre-generated for Pix
   expiresAt?: Date; // for Pix expiration
+  creditor?: {
+    name?: string;
+    cnpj?: string;
+  };
   debtor: {
     name: string;
     document: string; // CPF or CNPJ

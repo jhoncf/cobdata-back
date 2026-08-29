@@ -79,6 +79,7 @@ export class PaymentChargesService {
   ) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, accountId, deletedAt: null },
+      include: { wallet: { include: { creditor: true } } },
     });
 
     if (!contract) {
@@ -106,6 +107,10 @@ export class PaymentChargesService {
       amount: contract.updatedValue?.toString() ?? contract.originalValue.toString(),
       dueDate: contract.dueDate ?? new Date(),
       idempotencyKey: 'preflight',
+      creditor: {
+        name: contract.wallet.creditor.name,
+        cnpj: contract.wallet.creditor.cnpj ?? undefined,
+      },
       debtor: {
         name: contract.debtorName,
         document: contract.debtorDocument,
@@ -186,6 +191,7 @@ export class PaymentChargesService {
     // Resolve contract
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, accountId, deletedAt: null },
+      include: { wallet: { include: { creditor: true } } },
     });
 
     if (!contract) {
@@ -215,6 +221,10 @@ export class PaymentChargesService {
       idempotencyKey: dto.idempotencyKey,
       txid,
       expiresAt,
+      creditor: {
+        name: contract.wallet.creditor.name,
+        cnpj: contract.wallet.creditor.cnpj ?? undefined,
+      },
       debtor: {
         name: contract.debtorName,
         document: contract.debtorDocument,
@@ -317,6 +327,7 @@ export class PaymentChargesService {
   ) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, accountId, deletedAt: null },
+      include: { wallet: { include: { creditor: true } } },
     });
 
     if (!contract) {
@@ -361,6 +372,10 @@ export class PaymentChargesService {
       idempotencyKey,
       txid,
       expiresAt,
+      creditor: {
+        name: contract.wallet.creditor.name,
+        cnpj: contract.wallet.creditor.cnpj ?? undefined,
+      },
       debtor: {
         name: contract.debtorName,
         document: contract.debtorDocument,
@@ -459,6 +474,7 @@ export class PaymentChargesService {
         deletedAt: null,
         updatedValue: { gt: 0 },
       },
+      include: { wallet: { include: { creditor: true } } },
     });
 
     if (contracts.length === 0) {
@@ -513,6 +529,10 @@ export class PaymentChargesService {
       idempotencyKey: dto.idempotencyKey,
       txid,
       expiresAt,
+      creditor: {
+        name: contract.wallet.creditor.name,
+        cnpj: contract.wallet.creditor.cnpj ?? undefined,
+      },
       debtor: {
         name: contract.debtorName,
         document: normalizedDoc,

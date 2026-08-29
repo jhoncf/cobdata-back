@@ -64,6 +64,7 @@ export class BbProviderError extends Error {
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_PIX_EXPIRATION_SECONDS = 86_400; // 24 hours
+const MAX_SOLICITACAO_PAGADOR_LENGTH = 140;
 
 // ─── Adapter Implementation ────────────────────────────────────────────────────
 
@@ -266,7 +267,7 @@ export class BancoDoBrasilPaymentAdapter implements PaymentProviderAdapter {
         original: this.formatAmount(input.amount),
       },
       chave: config.pixKey!,
-      solicitacaoPagador: `Pagamento contrato CobCom`,
+      solicitacaoPagador: this.buildSolicitacaoPagador(input),
     };
 
     // The payer is optional for an immediate Pix charge. Some portfolio
@@ -281,6 +282,20 @@ export class BancoDoBrasilPaymentAdapter implements PaymentProviderAdapter {
     }
 
     return payload;
+  }
+
+  /**
+   * The Banco do Brasil Pix API displays this message to the payer. Keep the
+   * creditor identification clear while respecting the Pix 140-character cap.
+   */
+  private buildSolicitacaoPagador(input: IssuePaymentChargeInput): string {
+    const creditorName = input.creditor?.name?.trim() || 'Não informado';
+    const cnpj = input.creditor?.cnpj?.replace(/\D/g, '');
+    const message = cnpj
+      ? `Dívida. Credor: ${creditorName}. CNPJ: ${cnpj}`
+      : `Dívida. Credor: ${creditorName}`;
+
+    return message.slice(0, MAX_SOLICITACAO_PAGADOR_LENGTH);
   }
 
   private calculateExpirationSeconds(expiresAt?: Date): number {

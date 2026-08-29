@@ -44,6 +44,10 @@ function makePixInput(overrides: Partial<IssuePaymentChargeInput> = {}): IssuePa
     dueDate: new Date('2025-03-15'),
     idempotencyKey: 'idem-key-001',
     txid: 'txid1234567890abcdefghij',
+    creditor: {
+      name: 'Empresa Credora LTDA',
+      cnpj: '12.345.678/0001-90',
+    },
     debtor: {
       name: 'João da Silva',
       document: '12345678901',
@@ -296,7 +300,7 @@ describe('BancoDoBrasilPaymentAdapter', () => {
             devedor: { cpf: '12345678901', nome: 'João da Silva' },
             valor: { original: '150.50' },
             chave: 'test-pix-key@email.com',
-            solicitacaoPagador: 'Pagamento contrato CobCom',
+            solicitacaoPagador: 'Dívida. Credor: Empresa Credora LTDA. CNPJ: 12345678000190',
           }),
           gatewayConfig: defaultConfig,
         }),
