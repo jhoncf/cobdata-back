@@ -147,7 +147,7 @@ export class WhatsAppBotService {
     const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
     if (!contract) return ['Não localizei esta pendência.'];
     await this.prisma.contractInteraction.create({ data: { accountId: contract.accountId, walletId: contract.walletId, contractId, channel: 'WHATSAPP', status: 'ANSWERED', provider: 'chatwoot', contact, summary: 'Titular informou não reconhecer a dívida.' } });
-    return [`Registrei sua manifestação sobre o contrato ${contract.contractNumber}. A CobCom realiza a gestão da cobrança; contratação, contestação e documentos devem ser tratados diretamente com a empresa credora.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
+    return [`Registrei sua manifestação sobre o contrato ${contract.contractNumber}. Sua solicitação será analisada e, se necessário, um responsável poderá entrar em contato. A CobCom realiza a gestão da cobrança; contratação, contestação e documentos devem ser tratados diretamente com a empresa credora.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
   }
 
   private async details(contractId: string): Promise<string[]> {
