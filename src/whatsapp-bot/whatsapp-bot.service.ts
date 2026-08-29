@@ -168,7 +168,7 @@ export class WhatsAppBotService {
   private async intent(message: string): Promise<'PIX' | 'LINK' | 'UNKNOWN'> {
     const normalized = message.toLowerCase();
     if (/\b(link|site|pagina|página)\b/.test(normalized)) return 'LINK';
-    if (/\b(pix|pagar|pagamento|quitar|copia)\b/.test(normalized)) return 'PIX';
+    if (/\b(pix|pagar|pagamento|quitar|copia|negociar|negociacao)\b/.test(normalized)) return 'PIX';
     try {
       const command = new ConverseCommand({
         modelId: this.config.getOrThrow<string>('BEDROCK_CHAT_MODEL_ID'),
