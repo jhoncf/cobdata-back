@@ -44,30 +44,30 @@ export class WhatsAppBotService {
       create: { accountId, conversationKey: phone, chatwootConversationId },
       update: { chatwootConversationId },
     });
-    const response = await this.reply(conversation, content, messageId);
-    await this.sendToChatwoot(chatwootConversationId, response);
-    await this.prisma.whatsAppBotMessage.create({ data: { conversationId: conversation.id, externalMessageId: messageId, response } });
+    const responses = await this.reply(conversation, content, messageId);
+    for (const response of responses) await this.sendToChatwoot(chatwootConversationId, response);
+    await this.prisma.whatsAppBotMessage.create({ data: { conversationId: conversation.id, externalMessageId: messageId, response: responses.join('\n\n---\n\n') } });
     return { accepted: true };
   }
 
-  private async reply(conversation: any, message: string, messageId: string): Promise<string> {
+  private async reply(conversation: any, message: string, messageId: string): Promise<string[]> {
     const cpf = this.extractCpf(message);
     if (cpf) return this.lookup(conversation, cpf);
 
     const normalized = message.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-    if (['menu', 'inicio', 'olá', 'ola', 'oi'].includes(normalized)) return this.welcome();
+    if (['menu', 'inicio', 'olá', 'ola', 'oi'].includes(normalized)) return [this.welcome()];
 
     if (conversation.state === 'AWAITING_ACTION' && conversation.debtorDocumentEncrypted) {
       const debts = (conversation.contracts ?? []) as Debt[];
       const option = this.option(message, debts.length);
       const intent = await this.intent(message);
-      if (intent === 'LINK') return this.landingLink(conversation.debtorDocumentEncrypted);
+      if (intent === 'LINK') return [this.landingLink(conversation.debtorDocumentEncrypted)];
       if ((intent === 'PIX' || option) && debts.length) {
-        if (!option && debts.length > 1) return 'Para gerar o pagamento, informe o número da pendência desejada.';
+        if (!option && debts.length > 1) return ['Para gerar o pagamento, informe o número da pendência desejada.'];
         return this.generatePix(conversation, debts[(option ?? 1) - 1]!, messageId);
       }
     }
-    return this.welcome();
+    return [this.welcome()];
   }
 
   private async lookup(conversation: any, cpf: string) {
@@ -78,23 +78,31 @@ export class WhatsAppBotService {
       where: { id: conversation.id },
       data: { debtorDocumentEncrypted: encrypted, contracts: debts, state: debts.length ? 'AWAITING_ACTION' : 'AWAITING_CPF' },
     });
-    if (!debts.length) return 'Não localizei pendências em aberto para este CPF. Se precisar, digite *menu* para reiniciar o atendimento.';
+    if (!debts.length) return ['Não localizei pendências em aberto para este CPF. Se precisar, digite *menu* para reiniciar o atendimento.'];
     const list = debts.map((debt, index) => {
       const dueDate = debt.dueDate ? ` — vencimento ${new Date(debt.dueDate).toLocaleDateString('pt-BR')}` : '';
       return `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber} — R$ ${this.money(debt.amount)}${dueDate}`;
     }).join('\n');
-    return `Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola, ou digite *link* para abrir a página de pagamento.`;
+    return [
+      `Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola.`,
+      this.landingLink(encrypted),
+    ];
   }
 
   private async generatePix(conversation: any, debt: Debt, messageId: string) {
     try {
       const cpf = this.crypto.decrypt(conversation.debtorDocumentEncrypted);
       const charge = await this.debts.generatePix(debt.id, cpf, `whatsapp:${messageId}`);
+      if (!charge.pixCopyPaste) throw new Error('Cobrança Pix criada sem código copia e cola');
       const expiration = charge.expiresAt ? new Date(charge.expiresAt).toLocaleString('pt-BR') : 'o prazo informado na cobrança';
-      return `Pagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\n\nPix copia e cola:\n${charge.pixCopyPaste}\n\nValor: R$ ${this.money(charge.amount.toString())}\nVálido até ${expiration}.`;
+      return [
+        `Pagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\nValor: R$ ${this.money(charge.amount.toString())}\nVálido até ${expiration}.\n\nA próxima mensagem contém somente o código Pix para facilitar a cópia.`,
+        charge.pixCopyPaste,
+        this.landingLink(conversation.debtorDocumentEncrypted),
+      ];
     } catch (error) {
       this.logger.error('Não foi possível gerar Pix pelo WhatsApp', error instanceof Error ? error.stack : undefined);
-      return 'Não consegui gerar o Pix agora. Tente novamente em alguns minutos ou use o link de pagamento.';
+      return ['Não consegui gerar o Pix agora. Tente novamente em alguns minutos ou use o link de pagamento.', this.landingLink(conversation.debtorDocumentEncrypted)];
     }
   }
 
