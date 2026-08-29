@@ -79,7 +79,10 @@ export class WhatsAppBotService {
       data: { debtorDocumentEncrypted: encrypted, contracts: debts, state: debts.length ? 'AWAITING_ACTION' : 'AWAITING_CPF' },
     });
     if (!debts.length) return 'Não localizei pendências em aberto para este CPF. Se precisar, digite *menu* para reiniciar o atendimento.';
-    const list = debts.map((debt, index) => `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber} — R$ ${this.money(debt.amount)}`).join('\n');
+    const list = debts.map((debt, index) => {
+      const dueDate = debt.dueDate ? ` — vencimento ${new Date(debt.dueDate).toLocaleDateString('pt-BR')}` : '';
+      return `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber} — R$ ${this.money(debt.amount)}${dueDate}`;
+    }).join('\n');
     return `Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola, ou digite *link* para abrir a página de pagamento.`;
   }
 
@@ -144,7 +147,16 @@ export class WhatsAppBotService {
 
   private configuredInboxId() { return this.config.get<string>('CHATWOOT_INBOX_ID') ?? ''; }
   private phone(payload: ChatwootPayload) { return String(payload.sender?.phone_number ?? payload.conversation?.meta?.sender?.phone_number ?? payload.conversation?.contact_inbox?.source_id ?? '').replace(/\D/g, ''); }
-  private extractCpf(text: string) { const digits = text.replace(/\D/g, ''); return digits.length === 11 ? digits : null; }
+  private extractCpf(text: string) {
+    const cpf = text.replace(/\D/g, '');
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return null;
+    const validDigit = (length: number) => {
+      const sum = cpf.slice(0, length).split('').reduce((total, digit, index) => total + Number(digit) * (length + 1 - index), 0);
+      const remainder = (sum * 10) % 11;
+      return remainder === 10 ? 0 : remainder;
+    };
+    return validDigit(9) === Number(cpf[9]) && validDigit(10) === Number(cpf[10]) ? cpf : null;
+  }
   private option(text: string, count: number) { const found = text.match(/\b([1-9]\d*)\b/)?.[1]; const value = found ? Number(found) : 0; return value >= 1 && value <= count ? value : null; }
   private money(value: string) { return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 }

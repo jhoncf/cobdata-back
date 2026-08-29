@@ -45,6 +45,8 @@ jobs:
           LIGUELEAD_API_TOKEN: ${{ secrets.LIGUELEAD_API_TOKEN }}
           LIGUELEAD_WEBHOOK_TOKEN: ${{ secrets.LIGUELEAD_WEBHOOK_TOKEN }}
           SERASA_WEBHOOK_TOKEN: ${{ secrets.SERASA_WEBHOOK_TOKEN }}
+          CHATWOOT_API_ACCESS_TOKEN: ${{ secrets.CHATWOOT_API_ACCESS_TOKEN }}
+          CHATWOOT_WEBHOOK_TOKEN: ${{ secrets.CHATWOOT_WEBHOOK_TOKEN }}
         run: |
           test -n "$DATABASE_URL" && test -n "$JWT_SECRET" && test -n "$REDIS_PASSWORD" && test -n "$S3_ACCESS_KEY" && test -n "$S3_SECRET_KEY" && test -n "$SEED_ADMIN_EMAIL" && test -n "$SEED_ADMIN_PASSWORD" && test -n "$AWS_ACCESS_KEY_ID" && test -n "$AWS_SECRET_ACCESS_KEY" && test -n "$SES_REGION" && test -n "$SES_FROM_EMAIL" && test -n "$BB_WEBHOOK_TOKEN" && test -n "$SERASA_WEBHOOK_TOKEN"
           install -d -m 700 ~/.ssh
@@ -86,6 +88,14 @@ jobs:
           LIGUELEAD_APP_ID=3ee01180-caeb-46a7-9c86-0ed6f7e7e706
           LIGUELEAD_WEBHOOK_TOKEN=$LIGUELEAD_WEBHOOK_TOKEN
           SERASA_WEBHOOK_TOKEN=$SERASA_WEBHOOK_TOKEN
+          CHATWOOT_API_URL=https://chat.maisqpago.com.br
+          CHATWOOT_API_ACCESS_TOKEN=$CHATWOOT_API_ACCESS_TOKEN
+          CHATWOOT_ACCOUNT_ID=1
+          CHATWOOT_INBOX_ID=4
+          WHATSAPP_BOT_ACCOUNT_ID=00000000-0000-0000-0000-000000000001
+          CHATWOOT_WEBHOOK_TOKEN=$CHATWOOT_WEBHOOK_TOKEN
+          BEDROCK_REGION=us-east-1
+          BEDROCK_CHAT_MODEL_ID=us.amazon.nova-2-lite-v1:0
           EOF
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" 'mkdir -p /home/ec2-user/cobcom-crm/backend'
           rsync -az --delete --exclude .git --exclude node_modules --exclude dist --exclude .env.production -e 'ssh -i ~/.ssh/deploy_key' ./ "$DEPLOY_USER@$DEPLOY_HOST:/home/ec2-user/cobcom-crm/backend/"
