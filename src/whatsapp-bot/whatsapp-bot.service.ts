@@ -87,7 +87,8 @@ export class WhatsAppBotService {
     try {
       const cpf = this.crypto.decrypt(conversation.debtorDocumentEncrypted);
       const charge = await this.debts.generatePix(debt.id, cpf, `whatsapp:${messageId}`);
-      return `Pagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\n\nPix copia e cola:\n${charge.pixCopyPaste}\n\nValor: R$ ${this.money(charge.amount)}\nVálido até ${new Date(charge.expiresAt).toLocaleString('pt-BR')}.`;
+      const expiration = charge.expiresAt ? new Date(charge.expiresAt).toLocaleString('pt-BR') : 'o prazo informado na cobrança';
+      return `Pagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\n\nPix copia e cola:\n${charge.pixCopyPaste}\n\nValor: R$ ${this.money(charge.amount.toString())}\nVálido até ${expiration}.`;
     } catch (error) {
       this.logger.error('Não foi possível gerar Pix pelo WhatsApp', error instanceof Error ? error.stack : undefined);
       return 'Não consegui gerar o Pix agora. Tente novamente em alguns minutos ou use o link de pagamento.';
