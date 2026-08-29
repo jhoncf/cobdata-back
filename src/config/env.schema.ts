@@ -55,7 +55,7 @@ export const envSchema = z.object({
   CHATWOOT_API_ACCESS_TOKEN: z.string().optional().default(''),
   CHATWOOT_ACCOUNT_ID: z.string().optional().default('1'),
   CHATWOOT_INBOX_ID: z.string().optional().default(''),
-  WHATSAPP_BOT_ACCOUNT_ID: z.string().uuid().default('00000000-0000-0000-0000-000000000001'),
+  WHATSAPP_BOT_ACCOUNT_ID: z.string().min(1).default('00000000-0000-0000-0000-000000000001'),
   CHATWOOT_WEBHOOK_TOKEN: z.string().min(32).optional(),
   BEDROCK_REGION: z.string().default('us-east-1'),
   BEDROCK_CHAT_MODEL_ID: z.string().default('us.amazon.nova-2-lite-v1:0'),
