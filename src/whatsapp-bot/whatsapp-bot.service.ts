@@ -95,10 +95,7 @@ export class WhatsAppBotService {
       const dueDate = debt.dueDate ? ` — vencimento ${new Date(debt.dueDate).toLocaleDateString('pt-BR')}` : '';
       return `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber} — R$ ${this.money(debt.amount)}${dueDate}`;
     }).join('\n');
-    return [
-      `Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola. Para contestar ou ver dados completos, responda *não reconheço* ou *detalhes*.`,
-      this.landingLink(encrypted),
-    ];
+    return [`Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola. Para contestar ou ver dados completos, responda *não reconheço* ou *detalhes*.`];
   }
 
   private async generatePix(conversation: any, debt: Debt, messageId: string) {
