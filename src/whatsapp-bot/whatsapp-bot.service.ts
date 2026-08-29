@@ -111,11 +111,13 @@ export class WhatsAppBotService {
   private async generatePix(conversation: any, debt: Debt, messageId: string) {
     try {
       const cpf = this.crypto.decrypt(conversation.debtorDocumentEncrypted);
+      const contract = await this.prisma.contract.findUnique({ where: { id: debt.id }, select: { offer: true } });
       const charge = await this.debts.generatePix(debt.id, cpf, `whatsapp:${messageId}`);
       if (!charge.pixCopyPaste) throw new Error('Cobrança Pix criada sem código copia e cola');
       const expiration = charge.expiresAt ? new Date(charge.expiresAt).toLocaleString('pt-BR') : 'o prazo informado na cobrança';
+      const offer = this.offerMessage(contract?.offer, charge.amount.toString());
       return [
-        `Pagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\nValor: R$ ${this.money(charge.amount.toString())}\nVálido até ${expiration}.\n\nA próxima mensagem contém somente o código Pix para facilitar a cópia.`,
+        `Pagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\n${offer}\nVálido até ${expiration}.\n\nA próxima mensagem contém somente o código Pix para facilitar a cópia.`,
         charge.pixCopyPaste,
         this.landingLink(conversation.debtorDocumentEncrypted),
       ];
@@ -136,6 +138,15 @@ export class WhatsAppBotService {
   }
 
   private about() { return 'A CobCom é especializada em gestão e recuperação de créditos por meio de tecnologia, inteligência de dados e negociação digital. Nosso time comercial entrará em contato em breve.'; }
+
+  private offerMessage(raw: unknown, fallback: string) {
+    const offer = raw as Record<string, unknown> | null;
+    if (!offer || typeof offer !== 'object') return `Valor à vista: R$ ${this.money(fallback)}`;
+    const total = typeof offer.totalValue === 'number' ? offer.totalValue : Number(fallback);
+    const discount = typeof offer.discountPercentage === 'number' ? `\nDesconto aplicado: ${offer.discountPercentage}%` : '';
+    const installments = typeof offer.installments === 'number' && typeof offer.installmentValue === 'number' ? `\nParcelamento disponível: ${offer.installments}x de R$ ${this.money(String(offer.installmentValue))}` : '';
+    return `Valor à vista: R$ ${this.money(String(total))}${discount}${installments}`;
+  }
 
   private async dispute(contractId: string, contact: string): Promise<string[]> {
     const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
