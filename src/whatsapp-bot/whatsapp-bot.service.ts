@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PublicDebtService } from '../payments/public-debt.service';
 import { CryptoService } from '../providers/crypto.service';
 
-type Debt = { id: string; contractNumber: string; dueDate: Date | null; amount: string; creditor: { name: string; cnpj: string | null } };
+type Debt = { id: string; contractNumber: string; dueDate: Date | null; amount: string; updatedAmount?: string; cobcomDiscountPercent?: string; creditor: { name: string; cnpj: string | null } };
 type ChatwootPayload = Record<string, any>;
 
 @Injectable()
@@ -100,7 +100,11 @@ export class WhatsAppBotService {
     if (!debts.length) return ['Tudo certo por aqui! ✅\nNão encontramos pendências disponíveis para negociação neste momento.'];
     const list = debts.map((debt, index) => {
       const dueDate = debt.dueDate ? ` — vencimento ${new Date(debt.dueDate).toLocaleDateString('pt-BR')}` : '';
-      return `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber} — R$ ${this.money(debt.amount)}${dueDate}`;
+      const discount = Number(debt.cobcomDiscountPercent ?? 0);
+      const values = discount > 0 && debt.updatedAmount
+        ? `\n   Valor atualizado: R$ ${this.money(debt.updatedAmount)}\n   💙 Valor com Desconto CobCom (${this.money(String(discount))}%): R$ ${this.money(debt.amount)}`
+        : ` — R$ ${this.money(debt.amount)}`;
+      return `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber}${values}${dueDate}`;
     }).join('\n');
     return [`Encontramos uma oportunidade para você regularizar sua situação. 👇\n\nIdentificamos ${debts.length} pendência(s) em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para gerar o pagamento. Para contestar, responda *não reconheço*. Se já pagou, responda *já paguei*.`];
   }

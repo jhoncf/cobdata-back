@@ -46,6 +46,8 @@ export class PublicDebtService {
       contractNumber: contract.contractNumber,
       dueDate: contract.dueDate,
       amount: new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(contract.wallet.cobcomDiscountPercent)).div(100).toDecimalPlaces(2).toString(),
+      updatedAmount: contract.updatedValue.toString(),
+      cobcomDiscountPercent: contract.wallet.cobcomDiscountPercent.toString(),
       creditor: contract.wallet.creditor,
     }));
   }
