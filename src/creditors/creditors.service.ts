@@ -9,10 +9,11 @@ import { UpdateCreditorDto } from './dto/update-creditor.dto';
 import { ListCreditorsQueryDto } from './dto/list-creditors-query.dto';
 import { PaginatedResponse } from '../common/dto';
 import { Creditor } from '@prisma/client';
+import { CreditorWebhookService } from './creditor-webhook.service';
 
 @Injectable()
 export class CreditorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly webhook: CreditorWebhookService) {}
 
   async create(
     dto: CreateCreditorDto,
@@ -22,17 +23,20 @@ export class CreditorsService {
       await this.checkCnpjUniqueness(dto.cnpj);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const creditor = await this.prisma.$transaction(async (tx) => {
       const creditor = await tx.creditor.create({ data: {
         accountId,
         name: dto.name,
         cnpj: dto.cnpj ?? null,
         contacts: dto.contacts ? (dto.contacts as any) : null,
         address: dto.address ? (dto.address as any) : null,
+        webhookUrl: dto.webhookUrl ?? null,
+        webhookAuthKeyEncrypted: dto.webhookAuthKey ? this.webhook.encrypt(dto.webhookAuthKey) : null,
       } });
       await tx.wallet.create({ data: { accountId, creditorId: creditor.id, name: 'Entrada via API', isApiDefault: true } });
       return creditor;
     });
+    return this.toResponse(creditor);
   }
 
   async list(
@@ -73,7 +77,7 @@ export class CreditorsService {
     ]);
 
     return {
-      data,
+      data: data.map((creditor) => this.toResponse(creditor)),
       meta: {
         total,
         page,
@@ -92,7 +96,7 @@ export class CreditorsService {
       throw new NotFoundException('Creditor not found');
     }
 
-    return creditor;
+    return this.toResponse(creditor);
   }
 
   async update(
@@ -111,11 +115,14 @@ export class CreditorsService {
     if (dto.cnpj !== undefined) data.cnpj = dto.cnpj;
     if (dto.contacts !== undefined) data.contacts = dto.contacts as any;
     if (dto.address !== undefined) data.address = dto.address as any;
+    if (dto.webhookUrl !== undefined) data.webhookUrl = dto.webhookUrl || null;
+    if (dto.webhookAuthKey !== undefined) data.webhookAuthKeyEncrypted = dto.webhookAuthKey ? this.webhook.encrypt(dto.webhookAuthKey) : null;
 
-    return this.prisma.creditor.update({
+    const updated = await this.prisma.creditor.update({
       where: { id },
       data,
     });
+    return this.toResponse(updated);
   }
 
   async softDelete(id: string, accountId: string): Promise<void> {
@@ -183,5 +190,10 @@ export class CreditorsService {
     if (existing) {
       throw new ConflictException('CNPJ already in use by another creditor');
     }
+  }
+
+  private toResponse(creditor: Creditor) {
+    const { webhookAuthKeyEncrypted, ...safe } = creditor as Creditor & { webhookAuthKeyEncrypted?: string | null };
+    return { ...safe, hasWebhookAuthKey: !!webhookAuthKeyEncrypted };
   }
 }

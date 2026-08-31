@@ -38,4 +38,15 @@ export class CreateCreditorDto {
   @ValidateNested()
   @Type(() => AddressDto)
   address?: AddressDto;
+
+  @ApiPropertyOptional({ description: 'URL to receive contract status update events', example: 'https://partner.example.com/webhooks/cobcom' })
+  @IsOptional()
+  @IsString()
+  webhookUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Optional shared key. Stored encrypted and sent as Bearer token.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  webhookAuthKey?: string;
 }

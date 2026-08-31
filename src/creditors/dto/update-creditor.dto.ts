@@ -39,4 +39,15 @@ export class UpdateCreditorDto {
   @ValidateNested()
   @Type(() => AddressDto)
   address?: AddressDto;
+
+  @ApiPropertyOptional({ description: 'URL to receive contract status update events' })
+  @IsOptional()
+  @IsString()
+  webhookUrl?: string | null;
+
+  @ApiPropertyOptional({ description: 'Optional shared key. Omit to keep the existing key; send an empty string to remove it.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  webhookAuthKey?: string;
 }

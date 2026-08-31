@@ -269,6 +269,8 @@ model Creditor {
   cnpj      String?   @unique
   contacts  Json?
   address   Json?
+  webhookUrl String?
+  webhookAuthKeyEncrypted String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
