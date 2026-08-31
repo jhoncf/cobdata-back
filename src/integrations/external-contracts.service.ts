@@ -13,17 +13,17 @@ export class ExternalContractsService {
     private readonly paymentCharges: PaymentChargesService,
   ) {}
 
-  async list(accountId: string, creditorId: string, query: ExternalContractQueryDto) {
+  async list(accountId: string, creditorId: string | undefined, query: ExternalContractQueryDto) {
     return this.publicDebt.lookup(query.debtorDocument, accountId, query.contractNumber, creditorId);
   }
 
-  async updateContacts(accountId: string, creditorId: string, contractNumber: string, debtorDocument: string, dto: UpdateContractContactsDto) {
+  async updateContacts(accountId: string, creditorId: string | undefined, contractNumber: string, debtorDocument: string, dto: UpdateContractContactsDto) {
     if (!dto.email && !dto.phone) {
       throw new BadRequestException('Informe ao menos e-mail ou telefone para atualização.');
     }
     const normalizedDocument = this.normalizeDocument(debtorDocument);
     const contract = await this.prisma.contract.findFirst({
-      where: { accountId, contractNumber, debtorDocument: normalizedDocument, deletedAt: null, wallet: { creditorId } },
+      where: { accountId, contractNumber, debtorDocument: normalizedDocument, deletedAt: null, ...(creditorId ? { wallet: { creditorId } } : {}) },
       select: { id: true, debtorEmail: true, debtorPhone: true, updatedAt: true },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado para o CPF/CNPJ informado.');
@@ -35,7 +35,7 @@ export class ExternalContractsService {
     });
   }
 
-  async createPix(accountId: string, creditorId: string, contractNumber: string, debtorDocument: string, idempotencyKey: string, requestId: string) {
+  async createPix(accountId: string, creditorId: string | undefined, contractNumber: string, debtorDocument: string, idempotencyKey: string, requestId: string) {
     return this.paymentCharges.createPixByDocument(
       { debtorDocument, contractNumber, idempotencyKey },
       accountId,

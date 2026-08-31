@@ -1,0 +1,2 @@
+ALTER TABLE "ApiKey"
+ADD COLUMN "accessAllCreditors" BOOLEAN NOT NULL DEFAULT false;

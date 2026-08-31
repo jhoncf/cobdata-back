@@ -180,6 +180,7 @@ model ApiKey {
   id          String        @id @default(uuid())
   accountId   String
   creditorId  String?
+  accessAllCreditors Boolean @default(false)
   name        String
   tokenPrefix String
   tokenHash   String        @unique
