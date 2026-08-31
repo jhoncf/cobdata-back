@@ -135,14 +135,6 @@ export class OperationProcessor extends WorkerHost {
         // Serasa must receive the principal/original debt value. The updated
         // value remains available for CobCom's own payment channels.
         debtValue: Number(item.contract.originalValue),
-        // Serasa expects the original creditor as an object. The import source
-        // (for example, "Portal Serasa") is not an origin and must not be sent.
-        debtOrigin: item.contract.wallet?.creditor?.name && item.contract.wallet?.creditor?.cnpj
-          ? {
-              name: item.contract.wallet.creditor.name,
-              document: item.contract.wallet.creditor.cnpj.replace(/\D/g, ''),
-            }
-          : undefined,
       };
     });
 
