@@ -64,14 +64,7 @@ export class ContractsService {
       );
     }
 
-    // 3. The updated amount is mandatory and cannot be lower than the original debt.
-    if (dto.updatedValue < dto.originalValue) {
-      throw new UnprocessableEntityException(
-        'updatedValue must be greater than or equal to originalValue',
-      );
-    }
-
-    // 4. Resolve creditorId from wallet
+    // 3. Resolve creditorId from wallet
     const creditorId = wallet.creditorId;
 
     // 5. Compute deduplication key
@@ -494,13 +487,6 @@ export class ContractsService {
       updateData.updatedValue = dto.updatedValue;
     }
 
-    const resultingOriginalValue = dto.originalValue ?? Number(contract.originalValue);
-    const resultingUpdatedValue = dto.updatedValue ?? Number(contract.updatedValue);
-    if (resultingUpdatedValue < resultingOriginalValue) {
-      throw new UnprocessableEntityException(
-        'updatedValue must be greater than or equal to originalValue',
-      );
-    }
     if (dto.occurrenceDate !== undefined) {
       updateData.occurrenceDate = new Date(dto.occurrenceDate);
     }

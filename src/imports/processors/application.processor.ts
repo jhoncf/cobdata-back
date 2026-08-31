@@ -475,7 +475,7 @@ export class ApplicationProcessor extends WorkerHost {
     if (isNaN(originalValue) || originalValue < 0.01) return false;
 
     const updatedValue = parseFloat(line['updatedValue'] || '');
-    return !isNaN(updatedValue) && updatedValue >= originalValue;
+    return !isNaN(updatedValue) && updatedValue >= 0.01;
   }
 
   /**
