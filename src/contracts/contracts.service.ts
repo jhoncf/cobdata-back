@@ -10,6 +10,7 @@ import { DeduplicationService } from './deduplication.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
+import { BulkTransferContractsDto } from './dto/bulk-transfer-contracts.dto';
 import { Contract, ContractStatus, Prisma } from '@prisma/client';
 import { PaginatedResponse } from '../common/dto/paginated-response.dto';
 
@@ -178,6 +179,56 @@ export class ContractsService {
         status: 'ACTIVE',
       },
     });
+  }
+
+  /** Transfer every contract matched by the filters from one wallet to another. */
+  async bulkTransfer(dto: BulkTransferContractsDto, accountId: string) {
+    if (dto.sourceWalletId === dto.destinationWalletId) {
+      throw new UnprocessableEntityException('A carteira de destino deve ser diferente da carteira de origem.');
+    }
+
+    const [sourceWallet, destinationWallet] = await Promise.all([
+      this.prisma.wallet.findFirst({ where: { id: dto.sourceWalletId, accountId, deletedAt: null } }),
+      this.prisma.wallet.findFirst({ where: { id: dto.destinationWalletId, accountId, deletedAt: null } }),
+    ]);
+
+    if (!sourceWallet) throw new NotFoundException('Carteira de origem não encontrada.');
+    if (!destinationWallet) throw new UnprocessableEntityException('Carteira de destino não encontrada ou inacessível.');
+    if (destinationWallet.status === 'INACTIVE') throw new UnprocessableEntityException('A carteira de destino está inativa.');
+    if (sourceWallet.creditorId !== destinationWallet.creditorId) {
+      throw new UnprocessableEntityException('A transferência só é permitida entre carteiras do mesmo credor.');
+    }
+
+    const filters = dto.filters ?? {};
+    const where: Prisma.ContractWhereInput = {
+      accountId,
+      walletId: dto.sourceWalletId,
+      deletedAt: null,
+      serasaStatus: { in: EDITABLE_PROVIDER_STATUSES as any },
+      ...(filters.paymentStatus ? { paymentStatus: filters.paymentStatus } : {}),
+      ...(filters.serasaStatus ? { serasaStatus: filters.serasaStatus } : {}),
+      ...(filters.installmentOnly ? { totalInstallments: { gt: 1 } } : {}),
+    };
+
+    if (filters.minOriginalValue !== undefined || filters.maxOriginalValue !== undefined) {
+      where.originalValue = {
+        ...(filters.minOriginalValue !== undefined ? { gte: filters.minOriginalValue } : {}),
+        ...(filters.maxOriginalValue !== undefined ? { lte: filters.maxOriginalValue } : {}),
+      };
+    }
+    if (filters.minUpdatedValue !== undefined || filters.maxUpdatedValue !== undefined) {
+      where.updatedValue = {
+        ...(filters.minUpdatedValue !== undefined ? { gte: filters.minUpdatedValue } : {}),
+        ...(filters.maxUpdatedValue !== undefined ? { lte: filters.maxUpdatedValue } : {}),
+      };
+    }
+
+    const [matchedCount, transferred] = await this.prisma.$transaction([
+      this.prisma.contract.count({ where }),
+      this.prisma.contract.updateMany({ where, data: { walletId: dto.destinationWalletId } }),
+    ]);
+
+    return { matchedCount, transferredCount: transferred.count };
   }
 
   /**

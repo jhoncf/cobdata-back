@@ -19,6 +19,7 @@ import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
+import { BulkTransferContractsDto } from './dto/bulk-transfer-contracts.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators';
@@ -60,6 +61,19 @@ export class ContractsController {
     // Extract user scopes from request (set by ScopeGuard for VIEWERs)
     const userScopes: string[] | undefined = req.userScopes;
     return this.contractsService.list(query, user.accountId, user.role, userScopes);
+  }
+
+  @Post('bulk-transfer')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @HttpCode(HttpStatus.OK)
+  @Audit({ action: 'CONTRACT_BULK_TRANSFER', resourceType: 'Contract' })
+  @ApiOperation({ summary: 'Transfer filtered contracts to another wallet' })
+  @ApiResponse({ status: 200, description: 'Bulk transfer result' })
+  async bulkTransfer(
+    @Body() dto: BulkTransferContractsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.contractsService.bulkTransfer(dto, user.accountId);
   }
 
   @Get(':id/interactions')
