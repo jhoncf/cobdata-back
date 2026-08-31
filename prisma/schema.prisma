@@ -286,6 +286,7 @@ model Wallet {
   creditorId     String
   serasaWalletId String?
   isApiDefault   Boolean      @default(false)
+  cobcomDiscountPercent Decimal @default(0) @db.Decimal(5, 2)
   name           String
   status         WalletStatus @default(ACTIVE)
   deletedAt      DateTime?
@@ -483,6 +484,8 @@ model Contract {
   paidInstallments        Int            @default(0)
   totalPaidAmount         Decimal        @default(0) @db.Decimal(15, 2)
   lastPaymentAt           DateTime?
+  acceptedDiscountPercent Decimal? @db.Decimal(5, 2)
+  agreedPaymentAmount     Decimal? @db.Decimal(15, 2)
   deletedAt               DateTime?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
@@ -729,6 +732,8 @@ model PaymentCharge {
   method            PaymentMethod
   status            PaymentChargeStatus   @default(PENDING)
   amount            Decimal               @db.Decimal(15, 2)
+  baseAmount        Decimal?              @db.Decimal(15, 2)
+  discountPercent   Decimal               @default(0) @db.Decimal(5, 2)
   dueDate           DateTime
   idempotencyKey    String
   externalId        String?

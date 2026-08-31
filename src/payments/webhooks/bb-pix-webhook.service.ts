@@ -241,7 +241,7 @@ export class BbPixWebhookService {
    */
   private async refreshContractPaymentProjection(contractId: string): Promise<void> {
     const paidContract = await this.prisma.$transaction(async (tx) => {
-      const [contract, aggregation] = await Promise.all([
+      const [contract, aggregation, paidCharge] = await Promise.all([
         tx.contract.findUnique({ where: { id: contractId } }),
         tx.paymentSettlement.aggregate({
           where: {
@@ -251,6 +251,7 @@ export class BbPixWebhookService {
           _sum: { amount: true },
           _max: { paidAt: true },
         }),
+        tx.paymentCharge.findFirst({ where: { contractId, status: PaymentChargeStatus.PAID }, orderBy: { paidAt: 'desc' }, select: { amount: true, discountPercent: true } }),
       ]);
 
       if (!contract) {
@@ -259,7 +260,7 @@ export class BbPixWebhookService {
       }
 
       const totalPaid = aggregation._sum.amount ?? new Prisma.Decimal(0);
-      const targetAmount = contract.updatedValue;
+      const targetAmount = paidCharge?.amount ?? contract.updatedValue;
       const isFullyPaid = totalPaid.greaterThanOrEqualTo(targetAmount);
 
       await tx.contract.update({
@@ -267,6 +268,7 @@ export class BbPixWebhookService {
         data: {
           totalPaidAmount: totalPaid,
           lastPaymentAt: aggregation._max.paidAt ?? contract.lastPaymentAt,
+          ...(paidCharge ? { agreedPaymentAmount: paidCharge.amount, acceptedDiscountPercent: paidCharge.discountPercent } : {}),
           ...(isFullyPaid ? { paymentStatus: 'PAID' } : {}),
         },
       });

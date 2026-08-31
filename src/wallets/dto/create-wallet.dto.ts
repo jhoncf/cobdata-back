@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, MaxLength, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength, IsOptional, IsUUID, IsNumber, Min, Max } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -14,4 +14,7 @@ export class CreateWalletDto {
   @IsOptional()
   @IsUUID()
   serasaWalletId?: string;
+
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) @Max(100)
+  cobcomDiscountPercent?: number;
 }

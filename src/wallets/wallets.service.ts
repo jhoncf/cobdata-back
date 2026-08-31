@@ -46,6 +46,7 @@ export class WalletsService {
         creditorId,
         name: dto.name,
         status: 'ACTIVE',
+        cobcomDiscountPercent: dto.cobcomDiscountPercent ?? 0,
       },
     });
     if (dto.serasaWalletId) {
@@ -148,6 +149,7 @@ export class WalletsService {
     const data: any = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.status !== undefined) data.status = dto.status;
+    if (dto.cobcomDiscountPercent !== undefined) data.cobcomDiscountPercent = dto.cobcomDiscountPercent;
 
     const updated = await this.prisma.wallet.update({
       where: { id },

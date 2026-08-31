@@ -340,7 +340,7 @@ export class PaymentChargesService {
       );
     }
 
-    // Require updatedValue
+    // The CobCom wallet discount is calculated once at issuance and stored on the charge.
     if (!contract.updatedValue || parseFloat(contract.updatedValue.toString()) <= 0) {
       throw new UnprocessableEntityException(
         'Contract does not have a valid updatedValue for Pix issuance',
@@ -348,6 +348,9 @@ export class PaymentChargesService {
     }
 
     // Resolve default gateway for PIX
+    const discountPercent = new Prisma.Decimal(contract.wallet.cobcomDiscountPercent ?? 0);
+    const amount = new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(discountPercent)).div(100).toDecimalPlaces(2);
+    if (amount.lessThanOrEqualTo(0)) throw new UnprocessableEntityException('O desconto configurado gera um valor inválido para Pix.');
     const gateway = await this.resolvePixGateway(accountId);
     const existingPix = await this.findExistingValidPix(contractId, gateway.id);
     if (existingPix) {
@@ -367,7 +370,7 @@ export class PaymentChargesService {
     const input: IssuePaymentChargeInput = {
       contractId: contract.id,
       method: PaymentMethod.PIX,
-      amount: contract.updatedValue.toString(),
+      amount: amount.toString(),
       dueDate: contract.dueDate ?? new Date(),
       idempotencyKey,
       txid,
@@ -394,7 +397,7 @@ export class PaymentChargesService {
           paymentGatewayId: gateway.id,
           method: PaymentMethod.PIX,
           status: PaymentChargeStatus.ISSUED,
-          amount: contract.updatedValue.toString(),
+          amount: amount.toString(), baseAmount: contract.updatedValue.toString(), discountPercent: discountPercent.toString(),
           dueDate: contract.dueDate ?? new Date(),
           idempotencyKey,
           externalId: issued.externalId ?? null,
