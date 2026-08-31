@@ -3,6 +3,7 @@ import { ApiKeyScope } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
+import { UpdateApiKeyScopesDto } from './dto/update-api-key-scopes.dto';
 
 @Injectable()
 export class IntegrationKeysService {
@@ -47,5 +48,15 @@ export class IntegrationKeysService {
       await this.prisma.apiKey.update({ where: { id }, data: { revokedAt: new Date() } });
     }
     return { id, revoked: true };
+  }
+
+  async updateScopes(id: string, accountId: string, dto: UpdateApiKeyScopesDto) {
+    const key = await this.prisma.apiKey.findFirst({ where: { id, accountId, revokedAt: null } });
+    if (!key) throw new NotFoundException('Chave de integração não encontrada ou revogada.');
+    return this.prisma.apiKey.update({
+      where: { id },
+      data: { scopes: dto.scopes as ApiKeyScope[] },
+      select: { id: true, name: true, tokenPrefix: true, scopes: true, accessAllCreditors: true, lastUsedAt: true, revokedAt: true, createdAt: true, creditor: { select: { id: true, name: true, cnpj: true } } },
+    });
   }
 }
