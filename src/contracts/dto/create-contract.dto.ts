@@ -61,12 +61,11 @@ export class CreateContractDto {
   @Max(999999999.99)
   originalValue!: number;
 
-  @ApiPropertyOptional({ description: 'Updated debt value in BRL (with interest, fees, etc)', example: 1750.50, minimum: 0.01, maximum: 999999999.99 })
-  @IsOptional()
+  @ApiProperty({ description: 'Updated debt value in BRL (with interest, fees, etc)', example: 1750.50, minimum: 0.01, maximum: 999999999.99 })
   @IsNumber({}, { message: 'updatedValue must be a number' })
   @Min(0.01)
   @Max(999999999.99)
-  updatedValue?: number;
+  updatedValue!: number;
 
   @ApiPropertyOptional({ description: 'Debt origin description (max 100 chars)', example: 'Invoice #12345', maxLength: 100 })
   @IsOptional()

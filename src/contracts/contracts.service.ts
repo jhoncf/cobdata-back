@@ -64,11 +64,8 @@ export class ContractsService {
       );
     }
 
-    // 3. Validate updatedValue >= originalValue (if provided)
-    if (
-      dto.updatedValue !== undefined &&
-      dto.updatedValue < dto.originalValue
-    ) {
+    // 3. The updated amount is mandatory and cannot be lower than the original debt.
+    if (dto.updatedValue < dto.originalValue) {
       throw new UnprocessableEntityException(
         'updatedValue must be greater than or equal to originalValue',
       );
@@ -114,9 +111,7 @@ export class ContractsService {
           dueDate,
         };
 
-        if (dto.updatedValue !== undefined) {
-          updateData.updatedValue = dto.updatedValue;
-        }
+        updateData.updatedValue = dto.updatedValue;
         if (dto.debtOrigin !== undefined) {
           updateData.debtOrigin = dto.debtOrigin;
           updateData.debtOriginDocHash = debtOriginDocHash;
@@ -171,7 +166,7 @@ export class ContractsService {
         occurrenceDate,
         dueDate,
         originalValue: dto.originalValue,
-        updatedValue: dto.updatedValue ?? null,
+        updatedValue: dto.updatedValue,
         debtOrigin: dto.debtOrigin ?? null,
         debtOriginDocHash,
         productName: dto.productName ?? null,
@@ -497,6 +492,14 @@ export class ContractsService {
     }
     if (dto.updatedValue !== undefined) {
       updateData.updatedValue = dto.updatedValue;
+    }
+
+    const resultingOriginalValue = dto.originalValue ?? Number(contract.originalValue);
+    const resultingUpdatedValue = dto.updatedValue ?? Number(contract.updatedValue);
+    if (resultingUpdatedValue < resultingOriginalValue) {
+      throw new UnprocessableEntityException(
+        'updatedValue must be greater than or equal to originalValue',
+      );
     }
     if (dto.occurrenceDate !== undefined) {
       updateData.occurrenceDate = new Date(dto.occurrenceDate);

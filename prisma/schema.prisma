@@ -447,7 +447,7 @@ model Contract {
   occurrenceDate          DateTime
   dueDate                 DateTime?
   originalValue           Decimal        @db.Decimal(15, 2)
-  updatedValue            Decimal?       @db.Decimal(15, 2)
+  updatedValue            Decimal        @db.Decimal(15, 2)
   debtOrigin              String?
   debtOriginDocHash       String?
   productName             String?

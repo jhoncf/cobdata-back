@@ -153,7 +153,7 @@ export class WhatsAppBotService {
   private async details(contractId: string): Promise<string[]> {
     const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
     if (!contract) return ['Não localizei esta pendência.'];
-    const original = Number(contract.originalValue), updated = Number(contract.updatedValue ?? contract.originalValue);
+    const original = Number(contract.originalValue), updated = Number(contract.updatedValue);
     return [`Detalhes da pendência:\n\nCredor: ${contract.wallet.creditor.name}\nCNPJ: ${contract.wallet.creditor.cnpj ?? 'não informado'}\nContrato: ${contract.contractNumber}\nProduto/serviço: ${contract.productName ?? 'não informado'}\nValor original: R$ ${this.money(String(original))}\nEncargos (juros e multa não discriminados): R$ ${this.money(String(updated - original))}\nValor atualizado: R$ ${this.money(String(updated))}\nVencimento: ${contract.dueDate?.toLocaleDateString('pt-BR') ?? 'não informado'}\nSituação: Em aberto.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
   }
 

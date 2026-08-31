@@ -66,7 +66,6 @@ export class OperationProcessor extends WorkerHost {
               contractNumber: true,
               debtType: true,
               occurrenceDate: true,
-              originalValue: true,
               updatedValue: true,
               debtOrigin: true,
               debtId: true,
@@ -132,9 +131,8 @@ export class OperationProcessor extends WorkerHost {
         wallet,
         debtType: item.contract.debtType,
         occurrenceDate: item.contract.occurrenceDate.toISOString().slice(0, 10),
-        // Serasa must receive the principal/original debt value. The updated
-        // value remains available for CobCom's own payment channels.
-        debtValue: Number(item.contract.originalValue),
+        // Every negotiation channel, including Serasa, uses the current amount payable.
+        debtValue: Number(item.contract.updatedValue),
       };
     });
 

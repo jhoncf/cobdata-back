@@ -192,16 +192,16 @@ export class WalletsService {
       this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
         SELECT "paymentStatus" AS status,
                COUNT(*)::bigint AS count,
-               COALESCE(SUM(COALESCE("updatedValue", "originalValue")), 0) AS amount
+               COALESCE(SUM("updatedValue"), 0) AS amount
         FROM "Contract"
         WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL
         GROUP BY "paymentStatus"
       `),
       this.prisma.$queryRaw<Array<{ totalContracts: bigint; totalValue: Prisma.Decimal; serasaCount: bigint; serasaValue: Prisma.Decimal }>>(Prisma.sql`
         SELECT COUNT(*)::bigint AS "totalContracts",
-               COALESCE(SUM(COALESCE("updatedValue", "originalValue")), 0) AS "totalValue",
+               COALESCE(SUM("updatedValue"), 0) AS "totalValue",
                COUNT(*) FILTER (WHERE "serasaStatus" IN ('SENT', 'REGISTERED', 'UPDATED', 'REMOVING'))::bigint AS "serasaCount",
-               COALESCE(SUM(COALESCE("updatedValue", "originalValue")) FILTER (WHERE "serasaStatus" IN ('SENT', 'REGISTERED', 'UPDATED', 'REMOVING')), 0) AS "serasaValue"
+               COALESCE(SUM("updatedValue") FILTER (WHERE "serasaStatus" IN ('SENT', 'REGISTERED', 'UPDATED', 'REMOVING')), 0) AS "serasaValue"
         FROM "Contract"
         WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL
       `),

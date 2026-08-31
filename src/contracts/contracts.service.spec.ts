@@ -27,7 +27,9 @@ describe('ContractsService', () => {
     contractNumber: 'CTR-001',
     debtType: DebtType.COMMERCIAL,
     occurrenceDate: '2024-01-15',
+    dueDate: '2024-02-15',
     originalValue: 1000.0,
+    updatedValue: 1000.0,
   };
 
   const mockWallet = {

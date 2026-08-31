@@ -27,7 +27,7 @@ function valuesAreDifferent(
     debtType: string;
     occurrenceDate: Date;
     originalValue: Decimal;
-    updatedValue: Decimal | null;
+    updatedValue: Decimal;
     debtOrigin: string | null;
     debtorName: string;
     dueDate: Date | null;
@@ -47,7 +47,7 @@ function valuesAreDifferent(
     debtType: string;
     occurrenceDate: Date;
     originalValue: number;
-    updatedValue: number | null;
+    updatedValue: number;
     debtOrigin: string | null;
     debtorName: string;
     dueDate: Date | null;
@@ -72,7 +72,7 @@ function valuesAreDifferent(
 
   if (existing.originalValue.toNumber() !== incoming.originalValue) return true;
 
-  const existingUpdated = existing.updatedValue?.toNumber() ?? null;
+  const existingUpdated = existing.updatedValue.toNumber();
   if (existingUpdated !== incoming.updatedValue) return true;
 
   if ((existing.debtOrigin || null) !== (incoming.debtOrigin || null)) return true;
@@ -156,9 +156,7 @@ export class ApplicationProcessor extends WorkerHost {
           const dueDateStr = line['dueDate'] || '';
           const dueDate = dueDateStr.trim() !== '' ? new Date(dueDateStr) : null;
           const originalValue = parseFloat(line['originalValue'] || '0');
-          const updatedValueStr = line['updatedValue'] || '';
-          const updatedValue =
-            updatedValueStr.trim() !== '' ? parseFloat(updatedValueStr) : null;
+          const updatedValue = parseFloat(line['updatedValue'] || '');
           const debtOrigin = line['debtOrigin'] || null;
           const productName = line['productName']?.trim() || null;
           const debtorStreet = line['debtorStreet']?.trim() || null;
@@ -476,7 +474,8 @@ export class ApplicationProcessor extends WorkerHost {
     const originalValue = parseFloat(line['originalValue'] || '');
     if (isNaN(originalValue) || originalValue < 0.01) return false;
 
-    return true;
+    const updatedValue = parseFloat(line['updatedValue'] || '');
+    return !isNaN(updatedValue) && updatedValue >= originalValue;
   }
 
   /**

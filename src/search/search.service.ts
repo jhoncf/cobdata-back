@@ -151,7 +151,7 @@ export class SearchService {
       contractNumber: c.contractNumber,
       debtorName: c.debtorName,
       originalValue: Number(c.originalValue),
-      updatedValue: c.updatedValue ? Number(c.updatedValue) : Number(c.originalValue),
+      updatedValue: Number(c.updatedValue),
       creditorName: c.wallet.creditor.name,
     }));
   }

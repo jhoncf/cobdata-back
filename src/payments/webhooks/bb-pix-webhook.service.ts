@@ -259,7 +259,7 @@ export class BbPixWebhookService {
       }
 
       const totalPaid = aggregation._sum.amount ?? new Prisma.Decimal(0);
-      const targetAmount = contract.updatedValue ?? contract.originalValue;
+      const targetAmount = contract.updatedValue;
       const isFullyPaid = totalPaid.greaterThanOrEqualTo(targetAmount);
 
       await tx.contract.update({

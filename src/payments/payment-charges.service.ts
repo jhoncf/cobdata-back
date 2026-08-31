@@ -104,7 +104,7 @@ export class PaymentChargesService {
     const input: IssuePaymentChargeInput = {
       contractId: contract.id,
       method,
-      amount: contract.updatedValue?.toString() ?? contract.originalValue.toString(),
+      amount: contract.updatedValue.toString(),
       dueDate: contract.dueDate ?? new Date(),
       idempotencyKey: 'preflight',
       creditor: {

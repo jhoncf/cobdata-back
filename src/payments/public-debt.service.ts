@@ -44,7 +44,7 @@ export class PublicDebtService {
       id: contract.id,
       contractNumber: contract.contractNumber,
       dueDate: contract.dueDate,
-      amount: contract.updatedValue?.toString(),
+      amount: contract.updatedValue.toString(),
       creditor: contract.wallet.creditor,
     }));
   }

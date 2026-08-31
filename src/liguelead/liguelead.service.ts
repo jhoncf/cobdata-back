@@ -97,7 +97,7 @@ export class LigueLeadService {
           `Primeiros quatro dígitos do CPF esperados para confirmação interna — nunca leia em voz alta: ${this.spellDigits(contract.debtorDocument.slice(0, 4))}`,
           'Regra obrigatória de confirmação: peça somente os quatro primeiros dígitos do CPF. Compare exatamente os quatro dígitos informados com o valor esperado acima. Nunca peça nem repita o CPF completo. Só considere a pessoa confirmada quando os quatro dígitos coincidirem; se errar duas vezes, encerre a ligação sem informar detalhes da cobrança.',
           `NÚMERO DO CONTRATO — leia exatamente os caracteres separados por vírgulas: ${this.spellContractNumber(contract.contractNumber)}`,
-          `VALOR AUTORIZADO PARA FALAR AO CLIENTE — copie a fala exata, sem converter ou arredondar: ${this.paymentAmountContext(contract.updatedValue ?? contract.originalValue)}`,
+          `VALOR AUTORIZADO PARA FALAR AO CLIENTE — copie a fala exata, sem converter ou arredondar: ${this.paymentAmountContext(contract.updatedValue)}`,
         ].join('; '),
       })),
       ...(dto.retryAttempts

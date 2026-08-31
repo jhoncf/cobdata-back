@@ -20,6 +20,7 @@ const REQUIRED_FIELDS = [
   'debtType',
   'occurrenceDate',
   'originalValue',
+  'updatedValue',
 ];
 
 const VALID_DEBT_TYPES = [
@@ -303,27 +304,25 @@ export class ValidationProcessor extends WorkerHost {
       });
     }
 
-    // Validate updatedValue if present
+    // Validate updatedValue (required for every contract)
     const updatedValueStr = line['updatedValue'] || '';
-    if (updatedValueStr.trim() !== '') {
-      const updatedValue = parseFloat(updatedValueStr);
-      if (isNaN(updatedValue) || updatedValue < 0.01 || updatedValue > 999999999.99) {
-        errors.push({
-          lineNumber,
-          errorCode: 'INVALID_RANGE',
-          fieldName: 'updatedValue',
-          message: 'Valor atualizado deve estar entre 0.01 e 999.999.999,99',
-          fieldValue: line['updatedValue'],
-        });
-      } else if (updatedValue < originalValue) {
-        errors.push({
-          lineNumber,
-          errorCode: 'INVALID_RANGE',
-          fieldName: 'updatedValue',
-          message: 'Valor atualizado deve ser maior ou igual ao valor original',
-          fieldValue: line['updatedValue'],
-        });
-      }
+    const updatedValue = parseFloat(updatedValueStr);
+    if (isNaN(updatedValue) || updatedValue < 0.01 || updatedValue > 999999999.99) {
+      errors.push({
+        lineNumber,
+        errorCode: 'INVALID_RANGE',
+        fieldName: 'updatedValue',
+        message: 'Valor atualizado deve estar entre 0.01 e 999.999.999,99',
+        fieldValue: line['updatedValue'],
+      });
+    } else if (updatedValue < originalValue) {
+      errors.push({
+        lineNumber,
+        errorCode: 'INVALID_RANGE',
+        fieldName: 'updatedValue',
+        message: 'Valor atualizado deve ser maior ou igual ao valor original',
+        fieldValue: line['updatedValue'],
+      });
     }
 
     // Stop if format/range errors found before checking dedup
