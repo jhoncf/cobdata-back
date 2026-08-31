@@ -240,10 +240,60 @@ export class ContractsService {
     const contract = await this.prisma.contract.findFirst({ where: contractWhere, select: { id: true } });
     if (!contract) throw new NotFoundException('Contract not found');
 
-    return this.prisma.contractInteraction.findMany({
-      where: { contractId: id, accountId },
-      orderBy: { occurredAt: 'desc' },
-    });
+    const [interactions, serasaOperations] = await Promise.all([
+      this.prisma.contractInteraction.findMany({
+        where: { contractId: id, accountId },
+        orderBy: { occurredAt: 'desc' },
+      }),
+      this.prisma.providerOperationItem.findMany({
+        where: {
+          contractId: id,
+          operation: { accountId, provider: { type: 'SERASA_LNOP' } },
+        },
+        include: { operation: { select: { action: true } } },
+        orderBy: { updatedAt: 'desc' },
+      }),
+    ]);
+
+    const serasaHistory = serasaOperations.map((item) => ({
+      id: `serasa-${item.id}`,
+      channel: 'SERASA',
+      status: item.status === 'FAILED'
+        ? 'FAILED'
+        : item.status === 'WAITING_PROVIDER_EVENT' || item.status === 'PENDING'
+          ? 'SENT'
+          : 'COMPLETED',
+      provider: 'SERASA_LNOP',
+      externalId: item.debtId ?? item.transactionId,
+      contact: null,
+      summary: this.serasaOperationSummary(item.operation.action, item.status, item.errorMessage),
+      conversation: null,
+      recordingUrl: null,
+      payload: null,
+      occurredAt: item.updatedAt,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    }));
+
+    return [...interactions, ...serasaHistory].sort(
+      (left, right) => right.occurredAt.getTime() - left.occurredAt.getTime(),
+    );
+  }
+
+  private serasaOperationSummary(
+    action: 'CREATE_OR_UPDATE' | 'REMOVE',
+    status: string,
+    errorMessage: string | null,
+  ): string {
+    if (status === 'FAILED') {
+      return `Falha ao ${action === 'REMOVE' ? 'remover' : 'sincronizar'} com a Serasa${errorMessage ? `: ${errorMessage}` : ''}`;
+    }
+    if (status === 'WAITING_PROVIDER_EVENT' || status === 'PENDING') {
+      return `${action === 'REMOVE' ? 'Remoção' : 'Sincronização'} enviada à Serasa; aguardando confirmação.`;
+    }
+    if (status === 'REMOVED') return 'Dívida removida da Serasa.';
+    if (status === 'UPDATED') return 'Dívida atualizada na Serasa.';
+    return 'Dívida incluída na Serasa.';
   }
 
   /** Proxy a LigueLead recording only after validating the caller's contract scope. */
