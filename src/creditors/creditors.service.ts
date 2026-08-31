@@ -18,7 +18,7 @@ export class CreditorsService {
   async create(
     dto: CreateCreditorDto,
     accountId: string,
-  ): Promise<Creditor> {
+  ): Promise<any> {
     if (dto.cnpj) {
       await this.checkCnpjUniqueness(dto.cnpj);
     }
@@ -43,7 +43,7 @@ export class CreditorsService {
     query: ListCreditorsQueryDto,
     accountId: string,
     userScopes?: string[],
-  ): Promise<PaginatedResponse<Creditor>> {
+  ): Promise<PaginatedResponse<any>> {
     const { page, limit, search } = query;
     const skip = (page - 1) * limit;
 
@@ -87,7 +87,7 @@ export class CreditorsService {
     };
   }
 
-  async findById(id: string, accountId: string): Promise<Creditor> {
+  async findById(id: string, accountId: string): Promise<any> {
     const creditor = await this.prisma.creditor.findFirst({
       where: { id, accountId, deletedAt: null },
     });
@@ -103,7 +103,7 @@ export class CreditorsService {
     id: string,
     dto: UpdateCreditorDto,
     accountId: string,
-  ): Promise<Creditor> {
+  ): Promise<any> {
     const creditor = await this.findById(id, accountId);
 
     if (dto.cnpj && dto.cnpj !== creditor.cnpj) {

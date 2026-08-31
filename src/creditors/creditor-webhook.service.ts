@@ -46,7 +46,7 @@ export class CreditorWebhookService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
-      const response = await fetch(creditor.webhookUrl, {
+      const response = await fetch(creditor.webhookUrl!, {
         method: 'POST', headers, signal: controller.signal,
         body: JSON.stringify({
           event: 'contract.status.updated', occurredAt: new Date().toISOString(),

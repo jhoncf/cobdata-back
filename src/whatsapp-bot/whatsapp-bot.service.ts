@@ -69,6 +69,7 @@ export class WhatsAppBotService {
     if (conversation.state === 'AWAITING_CPF') {
       if (normalized === '1' || /divida|pendencia|consult/.test(normalized)) return ['Informe seu CPF com 11 números.'];
       if (normalized === '2' || /cobcom|soluc/.test(normalized)) return [this.about()];
+      if (/^\d{11}$/.test(message.replace(/\D/g, ''))) return ['Ops! Não consegui validar esse CPF. Confira os números e tente novamente.\n\nDigite seu CPF com 11 números.'];
       return [this.welcome()];
     }
     if (conversation.state === 'AWAITING_ACTION' && conversation.debtorDocumentEncrypted) {
@@ -77,6 +78,7 @@ export class WhatsAppBotService {
       const intent = await this.intent(message);
       const selected = debts[(option ?? 1) - 1];
       if (/nao reconhe|não reconhe|contest/.test(normalized) && selected) return this.dispute(selected.id, this.phoneFromConversation(conversation));
+      if (/ja paguei|já paguei|pagamento realizado/.test(normalized)) return this.paymentCheck(conversation);
       if (/detalh|mais inform/.test(normalized) && selected) return this.details(selected.id);
       if (intent === 'LINK') return [this.landingLink(conversation.debtorDocumentEncrypted)];
       if ((intent === 'PIX' || option) && debts.length) {
@@ -95,12 +97,12 @@ export class WhatsAppBotService {
       where: { id: conversation.id },
       data: { debtorDocumentEncrypted: encrypted, contracts: debts, state: debts.length ? 'AWAITING_ACTION' : 'AWAITING_CPF' },
     });
-    if (!debts.length) return ['Não localizei pendências em aberto para este CPF. Se precisar, digite *menu* para reiniciar o atendimento.'];
+    if (!debts.length) return ['Tudo certo por aqui! ✅\nNão encontramos pendências disponíveis para negociação neste momento.'];
     const list = debts.map((debt, index) => {
       const dueDate = debt.dueDate ? ` — vencimento ${new Date(debt.dueDate).toLocaleDateString('pt-BR')}` : '';
       return `${index + 1}. ${debt.creditor.name} — contrato ${debt.contractNumber} — R$ ${this.money(debt.amount)}${dueDate}`;
     }).join('\n');
-    return [`Encontrei estas pendências em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para receber o código copia e cola. Para contestar ou ver dados completos, responda *não reconheço* ou *detalhes*.`];
+    return [`Encontramos uma oportunidade para você regularizar sua situação. 👇\n\nIdentificamos ${debts.length} pendência(s) em aberto:\n\n${list}\n\nResponda com o número da pendência e *Pix* para gerar o pagamento. Para contestar, responda *não reconheço*. Se já pagou, responda *já paguei*.`];
   }
 
   private async generatePix(conversation: any, debt: Debt, messageId: string) {
@@ -112,7 +114,7 @@ export class WhatsAppBotService {
       const expiration = charge.expiresAt ? new Date(charge.expiresAt).toLocaleString('pt-BR') : 'o prazo informado na cobrança';
       const offer = this.offerMessage(contract?.offer, charge.amount.toString());
       return [
-        `Pagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\n${offer}\nVálido até ${expiration}.\n\nA próxima mensagem contém somente o código Pix para facilitar a cópia.`,
+        `Quer resolver isso agora? 💙\n\nPagamento para ${debt.creditor.name}, contrato ${debt.contractNumber}.\n${offer}\nVálido até ${expiration}.\n\nA próxima mensagem contém somente o código Pix para facilitar a cópia.`,
         charge.pixCopyPaste,
         this.landingLink(conversation.debtorDocumentEncrypted),
       ];
@@ -129,7 +131,7 @@ export class WhatsAppBotService {
   }
 
   private welcome() {
-    return 'Olá! 👋 Seja bem-vindo à CobCom.\nSou o assistente virtual e estou aqui para ajudá-lo.\n\nComo posso ajudar hoje?\n\n1. Consultar minhas dívidas\n2. Conhecer a CobCom e nossas soluções';
+    return 'Olá! Seja bem-vindo à CobCom. 👋\nSou seu assistente virtual e estou aqui para ajudar você a resolver suas pendências de forma simples, rápida e segura.\n\nComo posso ajudar?\n\n1. Consultar minhas dívidas\n2. Conhecer a CobCom e nossas soluções';
   }
 
   private about() { return 'A CobCom é especializada em gestão e recuperação de créditos por meio de tecnologia, inteligência de dados e negociação digital. Nosso time comercial entrará em contato em breve.'; }
@@ -147,7 +149,15 @@ export class WhatsAppBotService {
     const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
     if (!contract) return ['Não localizei esta pendência.'];
     await this.prisma.contractInteraction.create({ data: { accountId: contract.accountId, walletId: contract.walletId, contractId, channel: 'WHATSAPP', status: 'ANSWERED', provider: 'chatwoot', contact, summary: 'Titular informou não reconhecer a dívida.' } });
-    return [`Registrei sua manifestação sobre o contrato ${contract.contractNumber}. Sua solicitação será analisada e, se necessário, um responsável poderá entrar em contato. A CobCom realiza a gestão da cobrança; contratação, contestação e documentos devem ser tratados diretamente com a empresa credora.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
+    return [`Tudo bem. Vamos respeitar sua solicitação.\n\nRegistrei sua manifestação sobre o contrato ${contract.contractNumber}. Sua solicitação será analisada e, se necessário, um responsável poderá entrar em contato. Para esclarecer a origem da pendência ou apresentar uma contestação, fale diretamente com o credor responsável.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
+  }
+
+  private async paymentCheck(conversation: any): Promise<string[]> {
+    const cpf = this.crypto.decrypt(conversation.debtorDocumentEncrypted);
+    const accountId = this.config.getOrThrow<string>('WHATSAPP_BOT_ACCOUNT_ID');
+    const openDebts = await this.debts.lookup(cpf, accountId) as Debt[];
+    if (!openDebts.length) return ['Pagamento confirmado! 🎉\nEstá tudo certo. Essa pendência foi regularizada com sucesso.\n\nObrigado por utilizar a CobCom. 💙'];
+    return ['Ainda não conseguimos localizar esse pagamento. Isso pode acontecer quando ele foi realizado recentemente e ainda está em processamento. Pedimos para aguardar no máximo 72 horas.'];
   }
 
   private async details(contractId: string): Promise<string[]> {
