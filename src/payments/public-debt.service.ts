@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentChargesService } from './payment-charges.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class PublicDebtService {
@@ -35,7 +36,7 @@ export class PublicDebtService {
         contractNumber: true,
         dueDate: true,
         updatedValue: true,
-        wallet: { select: { creditor: { select: { name: true, cnpj: true } } } },
+        wallet: { select: { cobcomDiscountPercent: true, creditor: { select: { name: true, cnpj: true } } } },
       },
       orderBy: { dueDate: 'asc' },
     });
@@ -44,7 +45,7 @@ export class PublicDebtService {
       id: contract.id,
       contractNumber: contract.contractNumber,
       dueDate: contract.dueDate,
-      amount: contract.updatedValue.toString(),
+      amount: new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(contract.wallet.cobcomDiscountPercent)).div(100).toDecimalPlaces(2).toString(),
       creditor: contract.wallet.creditor,
     }));
   }
