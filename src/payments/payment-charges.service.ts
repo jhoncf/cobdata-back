@@ -455,6 +455,7 @@ export class PaymentChargesService {
     accountId: string,
     userId: string | undefined,
     requestId: string,
+    creditorId?: string,
   ) {
     // Normalize document (remove punctuation)
     const normalizedDoc = dto.debtorDocument.replace(/\D/g, '');
@@ -473,6 +474,7 @@ export class PaymentChargesService {
         paymentStatus: { not: 'PAID' },
         deletedAt: null,
         updatedValue: { gt: 0 },
+        ...(creditorId ? { wallet: { creditorId } } : {}),
       },
       include: { wallet: { include: { creditor: true } } },
     });

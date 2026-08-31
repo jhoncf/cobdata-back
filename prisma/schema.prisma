@@ -179,6 +179,7 @@ model Account {
 model ApiKey {
   id          String        @id @default(uuid())
   accountId   String
+  creditorId  String?
   name        String
   tokenPrefix String
   tokenHash   String        @unique
@@ -188,9 +189,11 @@ model ApiKey {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  account Account @relation(fields: [accountId], references: [id])
+  account  Account  @relation(fields: [accountId], references: [id])
+  creditor Creditor? @relation(fields: [creditorId], references: [id])
 
   @@index([accountId, revokedAt])
+  @@index([creditorId, revokedAt])
 }
 
 model User {
@@ -270,6 +273,7 @@ model Creditor {
 
   account Account  @relation(fields: [accountId], references: [id])
   wallets Wallet[]
+  apiKeys ApiKey[]
 }
 
 model Wallet {

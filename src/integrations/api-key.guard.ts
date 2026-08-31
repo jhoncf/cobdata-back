@@ -19,9 +19,12 @@ export class ApiKeyGuard implements CanActivate {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const apiKey = await this.prisma.apiKey.findFirst({
       where: { tokenHash, revokedAt: null },
-      select: { id: true, accountId: true, scopes: true },
+      select: { id: true, accountId: true, creditorId: true, scopes: true },
     });
     if (!apiKey) throw new UnauthorizedException('Chave de integração inválida ou revogada.');
+    if (!apiKey.creditorId) {
+      throw new ForbiddenException('Esta chave não possui um credor vinculado e não pode acessar a API externa.');
+    }
 
     const requiredScopes = this.reflector.getAllAndOverride<ApiKeyScope[]>(API_KEY_SCOPES_KEY, [
       context.getHandler(), context.getClass(),

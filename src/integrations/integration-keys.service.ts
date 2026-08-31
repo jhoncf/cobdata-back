@@ -11,22 +11,29 @@ export class IntegrationKeysService {
   async list(accountId: string) {
     return this.prisma.apiKey.findMany({
       where: { accountId },
-      select: { id: true, name: true, tokenPrefix: true, scopes: true, lastUsedAt: true, revokedAt: true, createdAt: true },
+      select: { id: true, name: true, tokenPrefix: true, scopes: true, lastUsedAt: true, revokedAt: true, createdAt: true, creditor: { select: { id: true, name: true, cnpj: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async create(accountId: string, dto: CreateApiKeyDto) {
+    const creditor = await this.prisma.creditor.findFirst({
+      where: { id: dto.creditorId, accountId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!creditor) throw new NotFoundException('Credor não encontrado para vincular à chave de integração.');
+
     const token = `cc_live_${randomBytes(32).toString('base64url')}`;
     const key = await this.prisma.apiKey.create({
       data: {
         accountId,
+        creditorId: creditor.id,
         name: dto.name.trim(),
         scopes: dto.scopes as ApiKeyScope[],
         tokenPrefix: token.slice(0, 16),
         tokenHash: createHash('sha256').update(token).digest('hex'),
       },
-      select: { id: true, name: true, tokenPrefix: true, scopes: true, createdAt: true },
+      select: { id: true, name: true, tokenPrefix: true, scopes: true, createdAt: true, creditor: { select: { id: true, name: true, cnpj: true } } },
     });
     return { ...key, token };
   }

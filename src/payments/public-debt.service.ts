@@ -17,7 +17,7 @@ export class PublicDebtService {
     return normalized;
   }
 
-  async lookup(document: string, accountId?: string, contractNumber?: string) {
+  async lookup(document: string, accountId?: string, contractNumber?: string, creditorId?: string) {
     const debtorDocument = this.normalizeDocument(document);
     const contracts = await this.prisma.contract.findMany({
       where: {
@@ -28,7 +28,7 @@ export class PublicDebtService {
         paymentStatus: { not: 'PAID' },
         deletedAt: null,
         updatedValue: { gt: 0 },
-        wallet: { status: 'ACTIVE', deletedAt: null },
+        wallet: { status: 'ACTIVE', deletedAt: null, ...(creditorId ? { creditorId } : {}) },
       },
       select: {
         id: true,

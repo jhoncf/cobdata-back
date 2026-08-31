@@ -23,7 +23,7 @@ export class ExternalContractsController {
   @ApiOperation({ summary: 'Consultar contratos pendentes por CPF/CNPJ', description: 'Usa a mesma regra de elegibilidade da página pública: contrato ativo, não pago, carteira ativa e valor atualizado positivo.' })
   @ApiResponse({ status: 200, description: 'Contratos pendentes e elegíveis para cobrança.' })
   list(@Query() query: ExternalContractQueryDto, @Req() req: any) {
-    return this.contracts.list(req.integration.accountId, query);
+    return this.contracts.list(req.integration.accountId, req.integration.creditorId, query);
   }
 
   @Post(':contractNumber/contacts')
@@ -32,7 +32,7 @@ export class ExternalContractsController {
   @ApiKeyScopes('CONTRACT_CONTACTS_WRITE')
   @ApiOperation({ summary: 'Atualizar contatos de um contrato específico', description: 'Atualiza somente telefone e/ou e-mail após validar CPF/CNPJ e número do contrato.' })
   updateContacts(@Param('contractNumber') contractNumber: string, @Query('debtorDocument') debtorDocument: string, @Body() dto: UpdateContractContactsDto, @Req() req: any) {
-    return this.contracts.updateContacts(req.integration.accountId, contractNumber, debtorDocument, dto);
+    return this.contracts.updateContacts(req.integration.accountId, req.integration.creditorId, contractNumber, debtorDocument, dto);
   }
 
   @Post(':contractNumber/pix')
@@ -44,6 +44,6 @@ export class ExternalContractsController {
     if (!idempotencyKey) {
       throw new BadRequestException('O cabeçalho Idempotency-Key é obrigatório.');
     }
-    return this.contracts.createPix(req.integration.accountId, contractNumber, dto.debtorDocument, idempotencyKey, req.requestId ?? 'external-api');
+    return this.contracts.createPix(req.integration.accountId, req.integration.creditorId, contractNumber, dto.debtorDocument, idempotencyKey, req.requestId ?? 'external-api');
   }
 }

@@ -1,6 +1,6 @@
 import { ApiKeyScope } from '@prisma/client';
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsArray, IsEnum, IsString, MaxLength } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsEnum, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateApiKeyDto {
   @ApiProperty({ example: 'Automação de cobrança - parceiro X' })
@@ -13,4 +13,8 @@ export class CreateApiKeyDto {
   @ArrayNotEmpty()
   @IsEnum(ApiKeyScope, { each: true })
   scopes!: ApiKeyScope[];
+
+  @ApiProperty({ description: 'Credor ao qual esta chave ficará restrita', format: 'uuid' })
+  @IsUUID()
+  creditorId!: string;
 }
