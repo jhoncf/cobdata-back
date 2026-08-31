@@ -49,7 +49,7 @@ async function bootstrap() {
   {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('CobCom — API de Cobranças')
-      .setDescription('Documentação para parceiros integrarem a geração de Pix CobCom.')
+      .setDescription('Documentação para parceiros enviarem contratos à carteira padrão de API e gerarem Pix. Cada chave é limitada ao credor autorizado — ou, quando configurada, aos credores da mesma conta.')
       .setVersion('0.1.0')
       .addBearerAuth(
         {

@@ -22,14 +22,16 @@ export class CreditorsService {
       await this.checkCnpjUniqueness(dto.cnpj);
     }
 
-    return this.prisma.creditor.create({
-      data: {
+    return this.prisma.$transaction(async (tx) => {
+      const creditor = await tx.creditor.create({ data: {
         accountId,
         name: dto.name,
         cnpj: dto.cnpj ?? null,
         contacts: dto.contacts ? (dto.contacts as any) : null,
         address: dto.address ? (dto.address as any) : null,
-      },
+      } });
+      await tx.wallet.create({ data: { accountId, creditorId: creditor.id, name: 'Entrada via API', isApiDefault: true } });
+      return creditor;
     });
   }
 

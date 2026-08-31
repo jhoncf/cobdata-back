@@ -4,6 +4,7 @@ import { Public } from '../common/decorators';
 import { ApiKeyGuard } from './api-key.guard';
 import { ApiKeyScopes } from './api-key-scopes.decorator';
 import { CreateContractPixDto } from './dto/create-contract-pix.dto';
+import { CreateExternalContractDto } from './dto/create-external-contract.dto';
 import { ExternalContractQueryDto } from './dto/external-contract-query.dto';
 import { UpdateContractContactsDto } from './dto/update-contract-contacts.dto';
 import { ExternalContractsService } from './external-contracts.service';
@@ -24,6 +25,14 @@ export class ExternalContractsController {
   @ApiResponse({ status: 200, description: 'Contratos pendentes e elegíveis para cobrança.' })
   list(@Query() query: ExternalContractQueryDto, @Req() req: any) {
     return this.contracts.list(req.integration.accountId, req.integration.accessAllCreditors ? undefined : req.integration.creditorId, query);
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiKeyScopes('CONTRACTS_WRITE')
+  @ApiOperation({ summary: 'Enviar contrato para a carteira padrão de entrada da API', description: 'Não aceite walletId. Chaves restritas usam o credor vinculado; chaves globais devem informar creditorId.' })
+  create(@Body() dto: CreateExternalContractDto, @Req() req: any) {
+    return this.contracts.createContract(req.integration.accountId, req.integration.accessAllCreditors ? dto.creditorId : req.integration.creditorId, dto);
   }
 
   @Post(':contractNumber/contacts')

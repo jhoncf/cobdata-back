@@ -4,6 +4,8 @@ import { PublicDebtService } from '../payments/public-debt.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExternalContractQueryDto } from './dto/external-contract-query.dto';
 import { UpdateContractContactsDto } from './dto/update-contract-contacts.dto';
+import { CreateExternalContractDto } from './dto/create-external-contract.dto';
+import { ContractsService } from '../contracts/contracts.service';
 
 @Injectable()
 export class ExternalContractsService {
@@ -11,10 +13,20 @@ export class ExternalContractsService {
     private readonly prisma: PrismaService,
     private readonly publicDebt: PublicDebtService,
     private readonly paymentCharges: PaymentChargesService,
+    private readonly contractsService: ContractsService,
   ) {}
 
   async list(accountId: string, creditorId: string | undefined, query: ExternalContractQueryDto) {
     return this.publicDebt.lookup(query.debtorDocument, accountId, query.contractNumber, creditorId);
+  }
+
+  async createContract(accountId: string, creditorId: string | undefined, dto: CreateExternalContractDto) {
+    if (!creditorId) throw new BadRequestException('Informe creditorId para uma chave com acesso a todos os credores.');
+    const creditor = await this.prisma.creditor.findFirst({ where: { id: creditorId, accountId, deletedAt: null }, select: { id: true } });
+    if (!creditor) throw new NotFoundException('Credor não encontrado.');
+    const wallet = await this.ensureDefaultWallet(accountId, creditor.id);
+    const { creditorId: _ignored, ...contract } = dto;
+    return this.contractsService.createOrUpdate({ ...contract, walletId: wallet.id }, accountId);
   }
 
   async updateContacts(accountId: string, creditorId: string | undefined, contractNumber: string, debtorDocument: string, dto: UpdateContractContactsDto) {
@@ -51,5 +63,11 @@ export class ExternalContractsService {
       throw new BadRequestException('Informe um CPF ou CNPJ válido.');
     }
     return normalized;
+  }
+
+  private async ensureDefaultWallet(accountId: string, creditorId: string) {
+    const existing = await this.prisma.wallet.findFirst({ where: { accountId, creditorId, isApiDefault: true, deletedAt: null } });
+    if (existing) return existing;
+    return this.prisma.wallet.create({ data: { accountId, creditorId, name: 'Entrada via API', isApiDefault: true } });
   }
 }

@@ -145,6 +145,7 @@ enum WhatsAppBotState {
 
 enum ApiKeyScope {
   CONTRACTS_READ
+  CONTRACTS_WRITE
   CONTRACT_CONTACTS_WRITE
   PIX_CREATE
 }
@@ -282,6 +283,7 @@ model Wallet {
   accountId      String
   creditorId     String
   serasaWalletId String?
+  isApiDefault   Boolean      @default(false)
   name           String
   status         WalletStatus @default(ACTIVE)
   deletedAt      DateTime?
