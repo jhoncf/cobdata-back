@@ -92,7 +92,16 @@ function valuesAreDifferent(
   return false;
 }
 
-@Processor(QUEUES.IMPORT_APPLICATION)
+// The apply worker runs long, CPU-bound reconciliations over large portfolios
+// (hundreds of thousands of rows). BullMQ's default 30s lock is far too short:
+// synchronous parsing/processing blocks the lock-renewal timer and the job is
+// wrongly flagged as stalled. A generous lock keeps a single worker owning the
+// job while it commits progress in idempotent chunks.
+@Processor(QUEUES.IMPORT_APPLICATION, {
+  lockDuration: 300_000,
+  stalledInterval: 300_000,
+  maxStalledCount: 3,
+})
 export class ApplicationProcessor extends WorkerHost {
   private readonly logger = new Logger(ApplicationProcessor.name);
   private static readonly TRANSACTION_BATCH_SIZE = 250;
