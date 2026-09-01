@@ -401,7 +401,7 @@ export class ContractsService {
     userRole: string,
     userScopes?: string[],
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, dateFrom, dateTo, debtorDocument, tags } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, dateFrom, dateTo, debtorDocument, search, tags } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -480,15 +480,38 @@ export class ContractsService {
       where.debtorDocumentHash = hash;
     }
 
+    if (search?.trim()) {
+      const term = search.trim();
+      const document = term.replace(/\D/g, '');
+      const searchConditions: Prisma.ContractWhereInput[] = [
+        { contractNumber: { contains: term, mode: 'insensitive' } },
+      ];
+
+      if (document.length > 0) {
+        searchConditions.push({
+          debtorDocumentHash: this.deduplicationService.sha256(document),
+        });
+      }
+
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND ? [where.AND] : [];
+      where.AND = [...existingAnd, { OR: searchConditions }];
+    }
+
     // Tag AND filter: contract must have ALL specified tags
     if (tags && tags.length > 0) {
       const normalizedTags = tags.map((t) => t.toLowerCase().trim());
       // Use AND logic: contract must have every tag
-      where.AND = normalizedTags.map((tag) => ({
+      const tagConditions = normalizedTags.map((tag) => ({
         tags: {
           some: { tag },
         },
       }));
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND ? [where.AND] : [];
+      where.AND = [...existingAnd, ...tagConditions];
     }
 
     const skip = (page - 1) * limit;

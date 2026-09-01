@@ -74,6 +74,11 @@ export class ListContractsQueryDto extends PaginationDto {
   @IsString()
   debtorDocument?: string;
 
+  /** Searches by contract number or CPF/CNPJ. */
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
