@@ -95,6 +95,7 @@ function valuesAreDifferent(
 @Processor(QUEUES.IMPORT_APPLICATION)
 export class ApplicationProcessor extends WorkerHost {
   private readonly logger = new Logger(ApplicationProcessor.name);
+  private static readonly TRANSACTION_BATCH_SIZE = 250;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -137,15 +138,14 @@ export class ApplicationProcessor extends WorkerHost {
       const walletId = batch.walletId;
       const accountId = batch.accountId;
 
-      // Keep the complete reconciliation atomic. Portfolio files can contain
-      // thousands of rows, which legitimately takes longer than Prisma's
-      // default 5-second interactive-transaction timeout.
-      await this.prisma.$transaction(async (tx) => {
-        for (const line of lines) {
-          // Skip lines with missing required fields (these would have been marked invalid during validation)
-          if (!this.isLineValid(line)) {
-            continue;
-          }
+      // Large portfolios must not be held in a single interactive transaction:
+      // it exceeds the transaction timeout and any restart discards all work.
+      // Each committed chunk is idempotent, so BullMQ can safely retry a job.
+      const validLines = lines.filter((line) => this.isLineValid(line));
+      for (let offset = 0; offset < validLines.length; offset += ApplicationProcessor.TRANSACTION_BATCH_SIZE) {
+        const chunk = validLines.slice(offset, offset + ApplicationProcessor.TRANSACTION_BATCH_SIZE);
+        await this.prisma.$transaction(async (tx) => {
+          for (const line of chunk) {
 
           // Extract mapped fields
           const debtorDoc = (line['debtorDocument'] || '').replace(/\D/g, '');
@@ -407,11 +407,19 @@ export class ApplicationProcessor extends WorkerHost {
             await tx.contract.update({ where: { id: existingContract.id }, data: updateData });
             updatedCount++;
           }
-        }
-      }, {
-        maxWait: 10_000,
-        timeout: 120_000,
-      });
+          }
+        }, {
+          maxWait: 10_000,
+          timeout: 120_000,
+        });
+
+        // Persist progress after every committed chunk. If a worker is
+        // restarted, already committed contracts are reconciled idempotently.
+        await this.prisma.importBatch.update({
+          where: { id: batchId },
+          data: { createdCount, updatedCount, ignoredCount },
+        });
+      }
 
       // Update batch counters and set status to APPLIED
       await this.prisma.importBatch.update({
