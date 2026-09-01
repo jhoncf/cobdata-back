@@ -3,7 +3,10 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  OnModuleDestroy,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { UpdateWalletDto } from './dto/update-wallet.dto';
@@ -21,11 +24,29 @@ export interface WalletSummary {
 }
 
 @Injectable()
-export class WalletsService {
+export class WalletsService implements OnModuleDestroy {
+  private readonly redis: Redis;
+  private static readonly LIST_CACHE_TTL_SECONDS = 60;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly serasaWallets: SerasaWalletsService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.redis = new Redis({
+      host: this.configService.get<string>('REDIS_HOST'),
+      port: this.configService.get<number>('REDIS_PORT'),
+      password: this.configService.get<string>('REDIS_PASSWORD') || undefined,
+      lazyConnect: true,
+    });
+    this.redis.connect().catch(() => {
+      // A falha do cache nunca deve impedir a listagem das carteiras.
+    });
+  }
+
+  async onModuleDestroy() {
+    await this.redis.quit();
+  }
 
   async create(
     creditorId: string,
@@ -61,6 +82,9 @@ export class WalletsService {
     userScopes?: string[],
   ): Promise<PaginatedResponse<Wallet>> {
     const { page, limit, search, creditorId } = query;
+    const cacheKey = this.getListCacheKey(accountId, query, userScopes);
+    const cached = await this.getCachedList(cacheKey);
+    if (cached) return cached;
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -99,7 +123,7 @@ export class WalletsService {
       this.prisma.wallet.count({ where }),
     ]);
 
-    return {
+    const result = {
       data,
       meta: {
         total,
@@ -108,6 +132,35 @@ export class WalletsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+
+    await this.cacheList(cacheKey, result);
+    return result;
+  }
+
+  private getListCacheKey(
+    accountId: string,
+    query: ListWalletsQueryDto,
+    userScopes?: string[],
+  ): string {
+    const scope = userScopes ? [...userScopes].sort() : null;
+    return `wallets:list:${JSON.stringify({ accountId, query, scope })}`;
+  }
+
+  private async getCachedList(cacheKey: string): Promise<PaginatedResponse<Wallet> | null> {
+    try {
+      const cached = await this.redis.get(cacheKey);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async cacheList(cacheKey: string, value: PaginatedResponse<Wallet>): Promise<void> {
+    try {
+      await this.redis.set(cacheKey, JSON.stringify(value), 'EX', WalletsService.LIST_CACHE_TTL_SECONDS);
+    } catch {
+      // O banco continua como fonte de verdade quando o Redis estiver indisponível.
+    }
   }
 
   async findById(
