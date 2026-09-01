@@ -97,6 +97,19 @@ export class ApplicationProcessor extends WorkerHost {
   private readonly logger = new Logger(ApplicationProcessor.name);
   private static readonly TRANSACTION_BATCH_SIZE = 250;
 
+  /**
+   * Converts a raw import value into a valid Date, or null when the value is
+   * empty or cannot be parsed. Dirty portfolio files occasionally carry
+   * malformed dates (e.g. "0000-00-00" or partial strings); those must never
+   * reach Prisma as an Invalid Date, which would abort the whole batch.
+   */
+  private static toValidDate(value: unknown): Date | null {
+    const raw = typeof value === 'string' ? value.trim() : value;
+    if (!raw) return null;
+    const parsed = new Date(raw as string);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
@@ -152,11 +165,9 @@ export class ApplicationProcessor extends WorkerHost {
           const debtorName = line['debtorName']?.trim() || '';
           const contractNumber = line['contractNumber'] || '';
           const debtType = (line['debtType'] || '').toUpperCase();
-          const occurrenceDate = new Date(line['occurrenceDate'] || '');
-          const dueDateStr = line['dueDate'] || '';
-          const dueDate = dueDateStr.trim() !== '' ? new Date(dueDateStr) : null;
-          const originalValue = parseFloat(line['originalValue'] || '0');
-          const updatedValue = parseFloat(line['updatedValue'] || '');
+          const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']);
+          const dueDate = ApplicationProcessor.toValidDate(line['dueDate']);
+          const originalValue = parseFloat(line['originalValue'] || '0');          const updatedValue = parseFloat(line['updatedValue'] || '');
           const debtOrigin = line['debtOrigin'] || null;
           const productName = line['productName']?.trim() || null;
           const debtorStreet = line['debtorStreet']?.trim() || null;
@@ -168,8 +179,15 @@ export class ApplicationProcessor extends WorkerHost {
           const debtorZipCode = line['debtorZipCode']?.trim() || null;
           const debtorPhone = line['debtorPhone']?.trim() || null;
           const debtorEmail = line['debtorEmail']?.trim() || null;
-          const cancelledAtStr = line['cancelledAt'] || '';
-          const cancelledAt = cancelledAtStr.trim() !== '' ? new Date(cancelledAtStr) : null;
+          const cancelledAt = ApplicationProcessor.toValidDate(line['cancelledAt']);
+
+          // occurrenceDate is a required column. A row whose occurrence date
+          // cannot be parsed is unusable; skip it instead of aborting the
+          // whole batch with a Prisma "Invalid Date" error.
+          if (!occurrenceDate) {
+            ignoredCount++;
+            continue;
+          }
 
           // Compute deduplication key
           const deduplicationKey =
