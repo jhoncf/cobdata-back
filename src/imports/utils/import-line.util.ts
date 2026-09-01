@@ -52,6 +52,31 @@ function normalizeHeader(value: string): string {
     .replace(/^_|_$/g, '');
 }
 
+/**
+ * Converts the currency formats normally found in creditor exports into a
+ * JavaScript-compatible decimal string.  The import receives both Brazilian
+ * (R$ 1.234,56) and international (R$ 1,234.56 / R$ 1234.56) layouts.
+ */
+function normalizeCurrencyValue(value: string): string {
+  const numeric = value.replace(/[^0-9,.-]/g, '');
+  if (!numeric) return value;
+
+  const lastComma = numeric.lastIndexOf(',');
+  const lastDot = numeric.lastIndexOf('.');
+  const decimalIndex = Math.max(lastComma, lastDot);
+
+  // A final separator followed by one or two digits is the decimal marker.
+  // All earlier separators are thousands markers and must be discarded.
+  if (decimalIndex >= 0 && numeric.length - decimalIndex - 1 <= 2) {
+    const integerPart = numeric.slice(0, decimalIndex).replace(/[.,]/g, '');
+    const decimalPart = numeric.slice(decimalIndex + 1).replace(/[.,]/g, '');
+    return `${integerPart}.${decimalPart}`;
+  }
+
+  // A separator followed by three digits is a thousands marker (e.g. 1.234).
+  return numeric.replace(/[.,]/g, '');
+}
+
 export function normalizeColumnMapping(
   columnMapping: Record<string, string>,
   headers: string[],
@@ -93,11 +118,7 @@ export function normalizeImportLine(line: ImportLineData): ImportLineData {
 
   for (const field of ['originalValue', 'updatedValue']) {
     const value = normalized[field]?.trim();
-    if (value && /^\d{1,3}(?:\.\d{3})*,\d+$/.test(value)) {
-      normalized[field] = value.replace(/\./g, '').replace(',', '.');
-    } else if (value && /^\d+,\d+$/.test(value)) {
-      normalized[field] = value.replace(',', '.');
-    }
+    if (value) normalized[field] = normalizeCurrencyValue(value);
   }
 
   // Some channel templates provide only a due date. Use it as the occurrence
