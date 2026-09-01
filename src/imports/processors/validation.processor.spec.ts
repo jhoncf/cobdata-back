@@ -238,7 +238,7 @@ describe('ValidationProcessor', () => {
       prisma.contract.findUnique.mockResolvedValue({
         id: 'contract-1',
         walletId: 'other-wallet',
-        providerStatus: 'PENDING',
+        serasaStatus: 'PENDING',
         deletedAt: null,
       });
 
@@ -253,11 +253,11 @@ describe('ValidationProcessor', () => {
       expect(errors[0]!.errorCode).toBe('WALLET_MISMATCH');
     });
 
-    it('should return PROVIDER_CONFLICT when contract has non-compatible providerStatus', async () => {
+    it('should return PROVIDER_CONFLICT when contract has non-compatible serasaStatus', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         id: 'contract-1',
         walletId: 'wallet-id',
-        providerStatus: 'REGISTERED',
+        serasaStatus: 'REGISTERED',
         deletedAt: null,
       });
 
@@ -276,7 +276,7 @@ describe('ValidationProcessor', () => {
       prisma.contract.findUnique.mockResolvedValue({
         id: 'contract-1',
         walletId: 'wallet-id',
-        providerStatus: 'PENDING',
+        serasaStatus: 'PENDING',
         deletedAt: null,
       });
 
@@ -294,7 +294,7 @@ describe('ValidationProcessor', () => {
       prisma.contract.findUnique.mockResolvedValue({
         id: 'contract-1',
         walletId: 'wallet-id',
-        providerStatus: 'FAILED',
+        serasaStatus: 'FAILED',
         deletedAt: null,
       });
 
@@ -312,7 +312,7 @@ describe('ValidationProcessor', () => {
       prisma.contract.findUnique.mockResolvedValue({
         id: 'contract-1',
         walletId: 'wallet-id',
-        providerStatus: 'REMOVED',
+        serasaStatus: 'REMOVED',
         deletedAt: null,
       });
 
@@ -330,7 +330,7 @@ describe('ValidationProcessor', () => {
       prisma.contract.findUnique.mockResolvedValue({
         id: 'contract-1',
         walletId: 'other-wallet',
-        providerStatus: 'REGISTERED',
+        serasaStatus: 'REGISTERED',
         deletedAt: new Date(),
       });
 
@@ -427,6 +427,40 @@ describe('ValidationProcessor', () => {
           debtType: 'OTHER',
         }),
       ]);
+    });
+
+    it('should normalize currency values with a symbol and a dot decimal separator', async () => {
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        ['num_adm', 'documento', 'm_contrato', 'valor_divida'],
+        ['C002', '12345678901', '20251101', 'R$ 231.71'],
+      ]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Contracts');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      const [line] = await processor.parseXlsxLines(buffer, {});
+
+      expect(line).toEqual(expect.objectContaining({
+        originalValue: '231.71',
+        updatedValue: '231.71',
+      }));
+    });
+
+    it('should normalize Brazilian currency values', async () => {
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        ['num_adm', 'documento', 'm_contrato', 'valor_divida'],
+        ['C003', '12345678901', '20251101', 'R$ 1.234,56'],
+      ]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Contracts');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      const [line] = await processor.parseXlsxLines(buffer, {});
+
+      expect(line).toEqual(expect.objectContaining({
+        originalValue: '1234.56',
+        updatedValue: '1234.56',
+      }));
     });
   });
 });

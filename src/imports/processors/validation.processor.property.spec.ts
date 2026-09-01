@@ -216,7 +216,7 @@ describe('Property 17: Import Line Validation Correctness', () => {
     );
   });
 
-  it('PROVIDER_CONFLICT: valid line + existing contract with non-compatible providerStatus => invalid', async () => {
+  it('PROVIDER_CONFLICT: valid line + existing contract with non-compatible serasaStatus => invalid', async () => {
     const conflictStatuses = ['SENT', 'REGISTERED', 'UPDATED', 'REMOVING', 'IN_AGREEMENT', 'AGREEMENT_BREACHED', 'PAID'] as const;
     const conflictStatusGen = fc.constantFrom(...conflictStatuses);
 
@@ -225,7 +225,7 @@ describe('Property 17: Import Line Validation Correctness', () => {
         prisma.contract.findUnique.mockResolvedValue({
           id: 'existing-contract',
           walletId: 'wallet-id', // same wallet
-          providerStatus: status,
+          serasaStatus: status,
           deletedAt: null,
         });
 
@@ -251,7 +251,7 @@ describe('Property 17: Import Line Validation Correctness', () => {
         prisma.contract.findUnique.mockResolvedValue({
           id: 'existing-contract',
           walletId: 'different-wallet-id',
-          providerStatus: 'PENDING',
+          serasaStatus: 'PENDING',
           deletedAt: null,
         });
 
@@ -271,7 +271,7 @@ describe('Property 17: Import Line Validation Correctness', () => {
     );
   });
 
-  it('no conflict when existing contract has compatible providerStatus (PENDING/FAILED/REMOVED)', async () => {
+  it('no conflict when existing contract has compatible serasaStatus (PENDING/FAILED/REMOVED)', async () => {
     const compatibleStatuses = ['PENDING', 'FAILED', 'REMOVED'] as const;
     const compatibleStatusGen = fc.constantFrom(...compatibleStatuses);
 
@@ -280,7 +280,7 @@ describe('Property 17: Import Line Validation Correctness', () => {
         prisma.contract.findUnique.mockResolvedValue({
           id: 'existing-contract',
           walletId: 'wallet-id', // same wallet
-          providerStatus: status,
+          serasaStatus: status,
           deletedAt: null,
         });
 
