@@ -503,6 +503,7 @@ model Contract {
   @@index([walletId, paymentStatus])
   @@index([walletId, totalInstallments])
   @@index([walletId, status, deletedAt])
+  @@index([accountId, walletId, deletedAt, createdAt(sort: Desc)])
   @@index([debtorDocumentHash])
 }
 
