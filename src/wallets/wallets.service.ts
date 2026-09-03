@@ -434,7 +434,7 @@ export class WalletsService implements OnModuleDestroy {
                COUNT(*)::bigint AS count,
                COALESCE(SUM("updatedValue"), 0) AS amount
         FROM "Contract"
-        WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL
+        WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL AND "status" = 'ACTIVE'
         GROUP BY "paymentStatus"
       `),
       this.prisma.$queryRaw<Array<{
@@ -476,7 +476,7 @@ export class WalletsService implements OnModuleDestroy {
                COALESCE(SUM(GREATEST("updatedValue" - COALESCE("offerValue", "updatedValue"), 0)), 0) AS "discountsConcededValue",
                COALESCE(SUM("updatedValue") FILTER (WHERE "status" = 'ACTIVE'), 0) AS "eligibleValue"
         FROM "Contract"
-        WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL
+        WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL AND "status" = 'ACTIVE'
       `),
     ]);
 

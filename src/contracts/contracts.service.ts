@@ -498,6 +498,9 @@ export class ContractsService {
         meta: { total: 0, page, limit, totalPages: 0 },
       };
     }
+    // Cancelled contracts are no longer part of the creditor's active
+    // portfolio and must not be returned by the portal lookup.
+    if (portalCreditorId && !status) where.status = 'ACTIVE';
 
     // A creditor portal account is restricted by creditorId. It is not a
     // wallet-scoped VIEWER, so an empty UserScope list must not hide all of
