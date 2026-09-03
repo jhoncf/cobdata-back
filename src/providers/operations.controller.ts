@@ -17,7 +17,7 @@ import { CreateOperationDto, ListOperationsDto, PreviewOperationDto } from './dt
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Audit } from '../common/decorators';
+import { Audit, CreditorPortalAccess } from '../common/decorators';
 import { AuthenticatedUser } from '../common/interfaces';
 
 @ApiTags('Operations')
@@ -70,6 +70,24 @@ export class OperationsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.operationsService.createForContract(contractId, user.id, user.accountId, 'REMOVE');
+  }
+
+  @Post('contracts/:contractId/cancel')
+  @Roles('ADMIN', 'OPERATIONAL', 'VIEWER')
+  @CreditorPortalAccess()
+  @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: 'CONTRACT_CANCEL', resourceType: 'Contract' })
+  @ApiOperation({ summary: 'Cancel a contract and remove it from active provider channels' })
+  async cancelForCreditorPortal(
+    @Param('contractId', ParseUUIDPipe) contractId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.operationsService.cancelContract(
+      contractId,
+      user.id,
+      user.accountId,
+      user.creditorId,
+    );
   }
 
   @Get()

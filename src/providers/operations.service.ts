@@ -289,6 +289,59 @@ export class OperationsService {
     return { id: operation.id, status: operation.status, contractId: contract.id };
   }
 
+  /**
+   * Cancels a contract at the creditor's request. A cancellation makes the
+   * contract unavailable in CobCom channels immediately and, when it has an
+   * active Serasa debt, queues the provider removal before changing the local
+   * administrative status.
+   */
+  async cancelContract(
+    contractId: string,
+    userId: string,
+    accountId: string,
+    creditorId?: string | null,
+  ) {
+    const contract = await this.prisma.contract.findFirst({
+      where: {
+        id: contractId,
+        accountId,
+        deletedAt: null,
+        ...(creditorId ? { wallet: { creditorId } } : {}),
+      },
+      select: { id: true, status: true, serasaStatus: true, debtId: true },
+    });
+    if (!contract) throw new NotFoundException('Contrato não encontrado');
+    if (contract.status === ContractStatus.CANCELLED) {
+      throw new ConflictException('Este contrato já está cancelado');
+    }
+
+    let serasaRemovalQueued = false;
+    if (
+      contract.debtId &&
+      [...ELIGIBLE_FOR_REMOVE, SerasaStatus.SENT].includes(contract.serasaStatus)
+    ) {
+      try {
+        await this.createForContract(contractId, userId, accountId, OperationAction.REMOVE);
+        serasaRemovalQueued = true;
+      } catch (error) {
+        // The local cancellation must still stop CobCom channels immediately.
+        // The failed provider removal remains visible in the application log.
+        this.logger.error(`Unable to queue Serasa removal for cancelled contract ${contractId}`, error);
+      }
+    }
+
+    await this.prisma.contract.update({
+      where: { id: contractId },
+      data: { status: ContractStatus.CANCELLED, cancelledAt: new Date() },
+    });
+
+    return {
+      contractId,
+      status: ContractStatus.CANCELLED,
+      serasaRemovalQueued,
+    };
+  }
+
   private async getSerasaProvider(accountId: string) {
     const provider = await this.prisma.provider.findFirst({
       where: { accountId, type: 'SERASA_LNOP' },

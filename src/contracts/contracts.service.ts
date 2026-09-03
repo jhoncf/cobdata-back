@@ -490,6 +490,15 @@ export class ContractsService {
     };
     if (portalCreditorId) where.wallet = { creditorId: portalCreditorId };
 
+    // The creditor portal is intentionally a lookup tool, not a browsable
+    // portfolio. Require a complete CPF before returning any contract data.
+    if (portalCreditorId && (debtorDocument?.replace(/\D/g, '').length !== 11)) {
+      return {
+        data: [],
+        meta: { total: 0, page, limit, totalPages: 0 },
+      };
+    }
+
     // A creditor portal account is restricted by creditorId. It is not a
     // wallet-scoped VIEWER, so an empty UserScope list must not hide all of
     // its own contracts.
