@@ -77,6 +77,20 @@ function normalizeCurrencyValue(value: string): string {
   return numeric.replace(/[.,]/g, '');
 }
 
+/**
+ * Excel stores dates as the number of days since 1899-12-30. Some exports
+ * leave their date column formatted as General, yielding values like 44972.
+ */
+function excelSerialDateToIso(value: string): string | null {
+  if (!/^\d{1,5}$/.test(value)) return null;
+
+  const serial = Number(value);
+  if (!Number.isInteger(serial) || serial < 1 || serial > 70_000) return null;
+
+  const date = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
+  return date.toISOString().slice(0, 10);
+}
+
 export function normalizeColumnMapping(
   columnMapping: Record<string, string>,
   headers: string[],
@@ -113,6 +127,9 @@ export function normalizeImportLine(line: ImportLineData): ImportLineData {
     } else if (value && /^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
       const [day, month, year] = value.split('/');
       normalized[field] = `${year}-${month}-${day}`;
+    } else if (value) {
+      const excelDate = excelSerialDateToIso(value);
+      if (excelDate) normalized[field] = excelDate;
     }
   }
 
