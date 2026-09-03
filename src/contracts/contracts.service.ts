@@ -490,8 +490,10 @@ export class ContractsService {
     };
     if (portalCreditorId) where.wallet = { creditorId: portalCreditorId };
 
-    // VIEWER scope filtering: only wallets in user scopes
-    if (userRole === 'VIEWER') {
+    // A creditor portal account is restricted by creditorId. It is not a
+    // wallet-scoped VIEWER, so an empty UserScope list must not hide all of
+    // its own contracts.
+    if (userRole === 'VIEWER' && !portalCreditorId) {
       if (!userScopes || userScopes.length === 0) {
         return {
           data: [],
@@ -510,10 +512,18 @@ export class ContractsService {
           meta: { total: 0, page, limit, totalPages: 0 },
         };
       }
-      where.walletId = walletId;
+      if (portalCreditorId) {
+        const existingAnd = Array.isArray(where.AND)
+          ? where.AND
+          : where.AND ? [where.AND] : [];
+        where.AND = [...existingAnd, { walletId }];
+      } else {
+        where.walletId = walletId;
+      }
     }
 
-    if (creditorId) {
+    // Never let a portal request override its creditor restriction.
+    if (creditorId && !portalCreditorId) {
       where.wallet = { creditorId };
     }
 
