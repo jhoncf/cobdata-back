@@ -91,7 +91,8 @@ jobs:
           CHATWOOT_API_URL=https://chat.maisqpago.com.br
           CHATWOOT_API_ACCESS_TOKEN=$CHATWOOT_API_ACCESS_TOKEN
           CHATWOOT_ACCOUNT_ID=1
-          CHATWOOT_INBOX_ID=4
+          # WhatsApp (4) e o chat web CobCom (5) compartilham o mesmo bot.
+          CHATWOOT_INBOX_IDS=4,5
           WHATSAPP_BOT_ACCOUNT_ID=00000000-0000-0000-0000-000000000001
           CHATWOOT_WEBHOOK_TOKEN=$CHATWOOT_WEBHOOK_TOKEN
           BEDROCK_REGION=us-east-1
