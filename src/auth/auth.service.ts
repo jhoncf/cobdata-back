@@ -103,6 +103,7 @@ export class AuthService {
     const accessToken = this.tokenService.generateAccessToken({
       sub: user.id,
       accountId: user.accountId,
+      creditorId: user.creditorId,
       role: user.role,
       sessionId: session.id,
       mustResetPassword: user.mustResetPassword || undefined,
@@ -177,6 +178,7 @@ export class AuthService {
     const accessToken = this.tokenService.generateAccessToken({
       sub: user.id,
       accountId: user.accountId,
+      creditorId: user.creditorId,
       role: user.role,
       sessionId: session.id,
       mustResetPassword: user.mustResetPassword || undefined,
@@ -372,6 +374,7 @@ export class AuthService {
         email: true,
         name: true,
         role: true,
+        creditorId: true,
         scopes: { select: { walletId: true } },
       },
     });
@@ -385,6 +388,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      creditorId: user.creditorId,
       scopes: user.role === 'VIEWER' ? user.scopes.map((s) => s.walletId) : [],
     };
   }

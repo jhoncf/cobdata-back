@@ -21,6 +21,7 @@ export class TokenService {
   generateAccessToken(payload: {
     sub: string;
     accountId: string;
+    creditorId?: string | null;
     role: string;
     sessionId: string;
     mustResetPassword?: boolean;
@@ -32,6 +33,8 @@ export class TokenService {
       role: payload.role,
       sessionId: payload.sessionId,
     };
+
+    if (payload.creditorId) jwtPayload.creditorId = payload.creditorId;
 
     if (payload.mustResetPassword) {
       jwtPayload.mustResetPassword = true;

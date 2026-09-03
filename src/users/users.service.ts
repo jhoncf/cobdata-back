@@ -7,7 +7,7 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../auth/services/session.service';
-import { InviteUserDto, ListUsersQueryDto, UpdateUserDto } from './dto';
+import { InviteUserDto, InviteCreditorUserDto, ListUsersQueryDto, UpdateUserDto } from './dto';
 import { PaginatedResponse } from '../common/dto';
 import { EmailService } from '../common/email';
 
@@ -97,6 +97,34 @@ export class UsersService {
       role: dto.role,
       status: 'PENDING',
     };
+  }
+
+  /** Invites a read-only user bound permanently to exactly one creditor. */
+  async inviteCreditorUser(creditorId: string, dto: InviteCreditorUserDto, accountId: string) {
+    const creditor = await this.prisma.creditor.findFirst({ where: { id: creditorId, accountId, deletedAt: null }, select: { id: true } });
+    if (!creditor) throw new NotFoundException('Creditor not found');
+    const email = dto.email.toLowerCase().trim();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing?.isActive) throw new ConflictException('Email already in use');
+
+    const user = existing
+      ? await this.prisma.user.update({ where: { id: existing.id }, data: { accountId, creditorId, role: 'VIEWER', name: dto.name ?? existing.name, isActive: false } })
+      : await this.prisma.user.create({ data: { accountId, creditorId, email, name: dto.name, role: 'VIEWER', isActive: false } });
+
+    await this.prisma.invite.updateMany({ where: { userId: user.id, status: 'PENDING' }, data: { status: 'EXPIRED' } });
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 72);
+    await this.prisma.invite.create({ data: { userId: user.id, token, role: 'VIEWER', expiresAt } });
+    await this.emailService.sendInvitation(email, token);
+    return { id: user.id, email: user.email, name: user.name, role: user.role, creditorId, status: 'PENDING' };
+  }
+
+  async listCreditorUsers(creditorId: string, accountId: string) {
+    return this.prisma.user.findMany({
+      where: { accountId, creditorId }, orderBy: { createdAt: 'desc' },
+      select: { id: true, email: true, name: true, isActive: true, passwordHash: true, createdAt: true },
+    }).then((users) => users.map(({ passwordHash, ...user }) => ({ ...user, status: this.computeUserStatus(user.isActive, passwordHash) })));
   }
 
   /**

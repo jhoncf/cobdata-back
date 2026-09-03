@@ -317,8 +317,10 @@ export class ContractsService {
     accountId: string,
     userRole: string,
     userScopes?: string[],
+    creditorId?: string | null,
   ) {
     const where: any = { id, accountId, deletedAt: null };
+    if (creditorId) where.wallet = { creditorId };
 
     // VIEWER scope filtering
     if (userRole === 'VIEWER' && userScopes && userScopes.length > 0) {
@@ -478,6 +480,7 @@ export class ContractsService {
     accountId: string,
     userRole: string,
     userScopes?: string[],
+    portalCreditorId?: string | null,
   ): Promise<PaginatedResponse<any>> {
     const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, debtorDocument, search, tags } = query;
 
@@ -485,6 +488,7 @@ export class ContractsService {
       accountId,
       deletedAt: null,
     };
+    if (portalCreditorId) where.wallet = { creditorId: portalCreditorId };
 
     // VIEWER scope filtering: only wallets in user scopes
     if (userRole === 'VIEWER') {

@@ -16,6 +16,8 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CreditorsService } from './creditors.service';
 import { CreateCreditorDto, UpdateCreditorDto, ListCreditorsQueryDto, UpsertCommercialRulesDto } from './dto';
+import { InviteCreditorUserDto } from '../users/dto';
+import { UsersService } from '../users/users.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators';
@@ -26,7 +28,20 @@ import { Request } from 'express';
 @ApiBearerAuth('bearer')
 @Controller('creditors')
 export class CreditorsController {
-  constructor(private readonly creditorsService: CreditorsService) {}
+  constructor(private readonly creditorsService: CreditorsService, private readonly usersService: UsersService) {}
+
+  @Get(':id/users')
+  @Roles('ADMIN')
+  async listPortalUsers(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.listCreditorUsers(id, user.accountId);
+  }
+
+  @Post(':id/users/invite')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.CREATED)
+  async invitePortalUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: InviteCreditorUserDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.inviteCreditorUser(id, dto, user.accountId);
+  }
 
   @Post()
   @Roles('ADMIN', 'OPERATIONAL')

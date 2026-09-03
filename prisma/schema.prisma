@@ -202,6 +202,7 @@ model ApiKey {
 model User {
   id                String   @id @default(uuid())
   accountId         String
+  creditorId        String?
   email             String   @unique
   passwordHash      String?
   name              String?
@@ -214,6 +215,7 @@ model User {
   updatedAt         DateTime @updatedAt
 
   account             Account             @relation(fields: [accountId], references: [id])
+  creditor            Creditor?           @relation(fields: [creditorId], references: [id])
   scopes              UserScope[]
   sessions            Session[]
   invites             Invite[]
@@ -277,6 +279,8 @@ model Creditor {
   deletedAt               DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
+
+  portalUsers             User[]
 
   account Account  @relation(fields: [accountId], references: [id])
   wallets Wallet[]

@@ -22,7 +22,7 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 import { BulkTransferContractsDto } from './dto/bulk-transfer-contracts.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Audit } from '../common/decorators';
+import { Audit, CreditorPortalAccess } from '../common/decorators';
 import { AuthenticatedUser } from '../common/interfaces';
 
 @ApiTags('Contracts')
@@ -49,6 +49,7 @@ export class ContractsController {
   }
 
   @Get()
+  @CreditorPortalAccess()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'List contracts', description: 'Paginated list of contracts with filters (wallet, creditor, status, date range, document)' })
   @ApiResponse({ status: 200, description: 'Paginated list of contracts' })
@@ -60,7 +61,7 @@ export class ContractsController {
   ) {
     // Extract user scopes from request (set by ScopeGuard for VIEWERs)
     const userScopes: string[] | undefined = req.userScopes;
-    return this.contractsService.list(query, user.accountId, user.role, userScopes);
+    return this.contractsService.list(query, user.accountId, user.role, userScopes, user.creditorId);
   }
 
   @Post('bulk-transfer')
@@ -108,6 +109,7 @@ export class ContractsController {
   }
 
   @Get(':id')
+  @CreditorPortalAccess()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get a contract by ID', description: 'Retrieve a single contract with wallet and creditor data' })
   @ApiResponse({ status: 200, description: 'Contract found' })
@@ -119,7 +121,7 @@ export class ContractsController {
     @Req() req: any,
   ) {
     const userScopes: string[] | undefined = req.userScopes;
-    return this.contractsService.findById(id, user.accountId, user.role, userScopes);
+    return this.contractsService.findById(id, user.accountId, user.role, userScopes, user.creditorId);
   }
 
   @Patch(':id')

@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Request, Response } from 'express';
-import { Public, CurrentUser, AllowMustReset, Audit } from '../common/decorators';
+import { Public, CurrentUser, AllowMustReset, Audit, CreditorPortalAccess } from '../common/decorators';
 import { AuthenticatedUser } from '../common/interfaces';
 import { AuthService } from './auth.service';
 import { RateLimitService } from './services/rate-limit.service';
@@ -180,6 +180,7 @@ export class AuthController {
 
   @ApiBearerAuth('bearer')
   @AllowMustReset()
+  @CreditorPortalAccess()
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @Audit({ action: 'AUTH_PASSWORD_CHANGE', resourceType: 'Auth' })
@@ -219,6 +220,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth('bearer')
+  @CreditorPortalAccess()
   @Get('me')
   @ApiOperation({ summary: 'Get current user info', description: 'Returns current user profile, role and scopes' })
   @ApiResponse({ status: 200, description: 'Current user information' })
@@ -228,6 +230,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth('bearer')
+  @CreditorPortalAccess()
   @Get('sessions')
   @ApiOperation({ summary: 'List active sessions', description: 'Returns all active sessions for the current user' })
   @ApiResponse({ status: 200, description: 'List of active sessions' })
@@ -237,6 +240,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth('bearer')
+  @CreditorPortalAccess()
   @Delete('sessions/:sessionId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke a session', description: 'Invalidate a specific session by ID (cannot revoke current session)' })
@@ -251,6 +255,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth('bearer')
+  @CreditorPortalAccess()
   @Delete('sessions')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke all other sessions', description: 'Invalidate all sessions except the current one' })
