@@ -8,6 +8,15 @@ export interface DebtPayload {
   debtType: string;
   occurrenceDate: string;
   debtValue: number;
+  offer: {
+    value: number;
+    dueDaysFirstInstallment: number;
+    maxInstallments: number;
+  };
+  debtOrigin?: {
+    name: string;
+    document: string;
+  };
 }
 
 export interface RemovePayload {
@@ -19,7 +28,6 @@ export interface ProviderConfig {
   apiKey: string;
   baseUrl: string;
   environment: 'HOMOLOGATION' | 'PRODUCTION';
-  walletMappings: Map<string, string>; // localWalletId → externalWalletId
 }
 
 export interface SendResult {

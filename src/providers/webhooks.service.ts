@@ -8,6 +8,8 @@ import {
   SerasaStatus,
   PaymentStatus,
   ProviderType,
+  InteractionChannel,
+  InteractionStatus,
 } from '@prisma/client';
 import { SettlementProcessorService } from '../payments/settlement/settlement-processor.service';
 
@@ -65,7 +67,10 @@ export class WebhooksService {
     }
 
     const eventType = payload.eventType || 'UNKNOWN';
-    const transactionId = payload.transactionId;
+    // Agreement webhooks documented by Serasa do not carry transactionId.
+    // Persist a deterministic key so provider retries are idempotent too.
+    const transactionId = this.asString(payload.transactionId)
+      ?? this.serasaWebhookIdempotencyKey(eventType, payload);
 
     // 3. Dedup check: (transactionId, eventType)
     if (transactionId && eventType) {
@@ -97,31 +102,40 @@ export class WebhooksService {
       },
     });
 
-    // 5. Find matching ProviderOperationItem by transactionId
-    if (!transactionId) {
-      await this.prisma.webhookEvent.update({
-        where: { id: webhookEvent.id },
-        data: { status: WebhookStatus.UNMATCHED, processedAt: new Date() },
-      });
-      return { status: 200, message: 'No transactionId, marked as UNMATCHED' };
-    }
-
+    // 5. Correlate the event. Agreement lifecycle events from Serasa can omit
+    // transactionId and identify the debt only through debtId/debtIds.
+    // Prefer an operation item when a transaction is supplied, then fall back
+    // to the debt reference stored on the contract.
     const operationItem = transactionId ? await this.prisma.providerOperationItem.findFirst({
       where: { transactionId },
       include: { contract: true },
     }) : null;
 
     const debtIds = [payload.debtId, ...(payload.debtIds ?? [])].filter((id): id is string => !!id);
-    const contract = operationItem?.contract ?? (debtIds.length > 0
-      ? await this.prisma.contract.findFirst({ where: { debtId: { in: debtIds }, deletedAt: null } })
-      : null);
+    const agreementId = this.asString(payload.agreementId);
+    const agreementLifecycleEvent = ['BreachedAgreementEvent', 'PaidAgreementEvent', 'PaidInstallmentEvent'].includes(eventType);
+    let contract = operationItem?.contract ?? null;
+    // The official Serasa payload documents agreementId as the strong key for
+    // breach and payment events. debtIds may be absent (or deprecated on a
+    // breach), so never depend on it for these lifecycle updates.
+    if (!contract && agreementLifecycleEvent && agreementId) {
+      contract = await this.prisma.contract.findFirst({ where: { agreementReference: agreementId, deletedAt: null } });
+    }
+    if (!contract && debtIds.length > 0) {
+      contract = await this.prisma.contract.findFirst({ where: { debtId: { in: debtIds }, deletedAt: null } });
+    }
+    // ClosedAgreementEvent supplies debtIds while establishing a new
+    // agreementReference, so agreementId remains a useful final fallback.
+    if (!contract && agreementId) {
+      contract = await this.prisma.contract.findFirst({ where: { agreementReference: agreementId, deletedAt: null } });
+    }
 
     if (!operationItem && !contract) {
       await this.prisma.webhookEvent.update({
         where: { id: webhookEvent.id },
         data: { status: WebhookStatus.UNMATCHED, processedAt: new Date() },
       });
-      return { status: 200, message: 'Unmatched transactionId' };
+      return { status: 200, message: transactionId ? 'Unmatched transactionId' : 'Unmatched debt reference' };
     }
 
     // 6. Process event based on type
@@ -130,6 +144,12 @@ export class WebhooksService {
         await this.processEvent(eventType, payload, operationItem);
       } else if (contract) {
         await this.processContractEvent(eventType, payload, contract.id);
+      }
+
+      // A provider operation documents what the CRM sent. The interaction
+      // records the provider's response, so the contract timeline is complete.
+      if (contract) {
+        await this.recordSerasaWebhookInteraction(contract.id, eventType, payload, transactionId);
       }
 
       await this.prisma.webhookEvent.update({
@@ -160,7 +180,9 @@ export class WebhooksService {
         }
         break;
       case 'DebtRemovedEvent':
-        if ((payload.status ?? 200) >= 200 && (payload.status ?? 200) < 300) {
+        // Removal is idempotent: 404 means the debt is already absent from
+        // Serasa and must not leave the CRM stuck in REMOVING.
+        if (((payload.status ?? 200) >= 200 && (payload.status ?? 200) < 300) || payload.status === 404) {
           await this.prisma.contract.update({ where: { id: contractId }, data: { serasaStatus: SerasaStatus.REMOVED } });
         }
         break;
@@ -172,7 +194,7 @@ export class WebhooksService {
         break;
       case 'PaidAgreementEvent':
         await this.recordSerasaPayment(contractId, eventType, payload);
-        await this.prisma.contract.update({ where: { id: contractId }, data: { paymentStatus: PaymentStatus.PAID, ...this.agreementProjection(payload) } });
+        await this.markAgreementPaid(contractId, payload);
         break;
       case 'PaidInstallmentEvent':
         await this.recordSerasaPayment(contractId, eventType, payload);
@@ -273,7 +295,7 @@ export class WebhooksService {
 
   /**
    * Process DebtRemovedEvent:
-   * - Status 200: item → REMOVED, contract → REMOVED
+   * - Status 200/404: item → REMOVED, contract → REMOVED
    * - Error status: item → FAILED, contract stays REMOVING
    */
   async processDebtRemovedEvent(
@@ -282,7 +304,9 @@ export class WebhooksService {
   ): Promise<void> {
     const httpStatus = payload.status || 0;
 
-    if (httpStatus === 200) {
+    // A 404 from the remove endpoint means there is nothing left to remove;
+    // treat it as a successful, idempotent removal.
+    if (httpStatus === 200 || httpStatus === 404) {
       await this.prisma.$transaction([
         this.prisma.providerOperationItem.update({
           where: { id: operationItem.id },
@@ -353,10 +377,7 @@ export class WebhooksService {
 
       case 'PaidAgreementEvent':
         await this.recordSerasaPayment(operationItem.contractId, eventType, payload);
-        await this.prisma.contract.update({
-          where: { id: operationItem.contractId },
-          data: { paymentStatus: PaymentStatus.PAID, ...this.agreementProjection(payload) },
-        });
+        await this.markAgreementPaid(operationItem.contractId, payload);
         break;
 
       case 'PaidInstallmentEvent':
@@ -370,39 +391,60 @@ export class WebhooksService {
   private agreementProjection(payload: WebhookPayload): Record<string, unknown> {
     const agreement = this.asRecord(payload.agreement) ?? payload;
     const reference = this.asString(agreement.agreementId ?? agreement.id ?? payload.agreementId);
+    const installments = Array.isArray(agreement.installments)
+      ? agreement.installments
+      : Array.isArray(payload.installments)
+        ? payload.installments
+        : undefined;
     const totalInstallments = this.asPositiveInt(
       agreement.totalInstallments
       ?? agreement.installmentsAmount
-      ?? agreement.installments
       ?? agreement.installmentCount
       ?? payload.totalInstallments
       ?? payload.installmentsAmount,
     );
     const totalAmount = this.asAmount(agreement.totalAmount ?? agreement.agreementValue ?? agreement.amount ?? payload.agreementTotalAmount);
+    const firstInstallment = installments?.[0] ? this.asRecord(installments[0]) : null;
+    const dueAt = this.parseProviderDate(this.asString(firstInstallment?.dueDate ?? firstInstallment?.paymentLimitDate));
+    const discountPercentage = this.asAmount(agreement.discountPercentage ?? payload.discountPercentage);
     return {
       ...(reference ? { agreementReference: reference } : {}),
       ...(totalInstallments ? { totalInstallments } : {}),
       ...(totalAmount !== undefined ? { agreementTotalAmount: totalAmount } : {}),
+      ...(totalAmount !== undefined ? { agreedPaymentAmount: totalAmount } : {}),
+      ...(installments ? { agreementInstallments: installments as any } : {}),
+      ...(dueAt ? { agreementDueAt: dueAt } : {}),
+      ...(discountPercentage !== undefined ? { acceptedDiscountPercent: discountPercentage } : {}),
     };
   }
 
   private async recordSerasaPayment(contractId: string, eventType: string, payload: WebhookPayload): Promise<void> {
-    const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, select: { accountId: true } });
-    if (!contract || !payload.transactionId) return;
+    const contract = await this.prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { accountId: true, agreementReference: true, agreementTotalAmount: true, agreementInstallments: true },
+    });
+    if (!contract) return;
     const payment = this.asRecord(payload.payment) ?? this.asRecord(payload.installment) ?? payload;
-    const amount = this.asAmount(payment.amount ?? payment.paidAmount ?? payload.amount ?? payload.paidAmount);
-    if (amount === undefined) return;
     const installmentNumber = this.asPositiveInt(payment.installmentNumber ?? payment.number ?? payload.installmentNumber);
+    const amount = this.asAmount(payment.amount ?? payment.paidAmount ?? payload.amount ?? payload.paidAmount)
+      ?? this.scheduledInstallmentAmount(contract.agreementInstallments, installmentNumber)
+      ?? (eventType === 'PaidAgreementEvent' ? this.asAmount(contract.agreementTotalAmount) : undefined);
+    if (amount === undefined) return;
     const projection = this.agreementProjection(payload);
+    const agreementReference = projection.agreementReference as string | undefined ?? contract.agreementReference ?? undefined;
+    const rawDate = this.asString(payload.paymentDate ?? payload.date ?? payload.paidAt);
+    const paidAt = this.parseProviderDate(rawDate) ?? new Date();
+    const eventReference = payload.transactionId
+      ?? `${agreementReference ?? contractId}:${eventType}:${installmentNumber ?? 'FULL'}:${rawDate ?? 'undated'}`;
     await this.settlementProcessor.processEvent({
       provider: 'SERASA_LNOP', eventType: eventType === 'PaidInstallmentEvent' ? 'PAID_INSTALLMENT' : 'PAID_AGREEMENT',
-      externalEventId: payload.transactionId,
-      externalTransactionId: payload.transactionId,
+      externalEventId: eventReference,
+      externalTransactionId: payload.transactionId ?? undefined,
       contractReference: contractId,
-      agreementReference: projection.agreementReference as string | undefined,
+      agreementReference,
       installmentNumber,
       amount: String(amount),
-      paidAt: new Date(), status: 'CONFIRMED', providerPayload: payload as Record<string, unknown>,
+      paidAt, status: 'CONFIRMED', providerPayload: payload as Record<string, unknown>,
     }, contract.accountId);
   }
 
@@ -421,11 +463,34 @@ export class WebhooksService {
     });
   }
 
+  /** A PaidAgreementEvent has the payment date but not necessarily its value.
+   * The closed agreement snapshot is the authoritative value for a full quit.
+   */
+  private async markAgreementPaid(contractId: string, payload: WebhookPayload): Promise<void> {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { agreementTotalAmount: true, totalPaidAmount: true, totalInstallments: true, paidInstallments: true },
+    });
+    if (!contract) return;
+    const rawDate = this.asString(payload.date ?? payload.paymentDate ?? payload.paidAt);
+    const paidAt = this.parseProviderDate(rawDate) ?? new Date();
+    await this.prisma.contract.update({
+      where: { id: contractId },
+      data: {
+        paymentStatus: PaymentStatus.PAID,
+        lastPaymentAt: paidAt,
+        totalPaidAmount: contract.agreementTotalAmount ?? contract.totalPaidAmount,
+        paidInstallments: contract.totalInstallments ?? contract.paidInstallments,
+        ...this.agreementProjection(payload),
+      },
+    });
+  }
+
   /** Uses Serasa's installment number when supplied, avoiding double-counting retries. */
   private async markInstallmentPaid(contractId: string, payload: WebhookPayload): Promise<void> {
     const contract = await this.prisma.contract.findUnique({
       where: { id: contractId },
-      select: { paidInstallments: true, paymentStatus: true },
+      select: { paidInstallments: true, paymentStatus: true, totalInstallments: true },
     });
     if (!contract) return;
     const payment = this.asRecord(payload.payment) ?? this.asRecord(payload.installment) ?? payload;
@@ -433,16 +498,101 @@ export class WebhooksService {
     const paidInstallments = installmentNumber
       ? Math.max(contract.paidInstallments, installmentNumber)
       : contract.paidInstallments + 1;
+    const projection = this.agreementProjection(payload);
+    const totalInstallments = (projection.totalInstallments as number | undefined) ?? contract.totalInstallments;
+    const isFullyPaid = !!totalInstallments && paidInstallments >= totalInstallments;
     await this.prisma.contract.update({
       where: { id: contractId },
       data: {
-        paymentStatus: contract.paymentStatus === PaymentStatus.IN_AGREEMENT
+        paymentStatus: isFullyPaid
+          ? PaymentStatus.PAID
+          : contract.paymentStatus === PaymentStatus.IN_AGREEMENT
           ? PaymentStatus.IN_AGREEMENT
           : PaymentStatus.INSTALLMENT,
         paidInstallments,
-        ...this.agreementProjection(payload),
+        ...projection,
       },
     });
+  }
+
+  /** The official PaidInstallmentEvent does not include an amount. */
+  private scheduledInstallmentAmount(schedule: unknown, installmentNumber?: number): number | undefined {
+    if (!Array.isArray(schedule) || !installmentNumber) return undefined;
+    const installment = schedule
+      .map((item) => this.asRecord(item))
+      .find((item) => this.asPositiveInt(item?.number ?? item?.installmentNumber) === installmentNumber);
+    return this.asAmount(installment?.value ?? installment?.amount);
+  }
+
+  private parseProviderDate(value?: string): Date | undefined {
+    if (!value) return undefined;
+    const parsed = new Date(value.length === 10 ? `${value}T12:00:00.000Z` : value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  private serasaWebhookIdempotencyKey(eventType: string, payload: WebhookPayload): string | undefined {
+    const agreementId = this.asString(payload.agreementId);
+    if (agreementId) {
+      const installmentNumber = this.asPositiveInt(payload.installmentNumber);
+      const eventDate = this.asString(payload.paymentDate ?? payload.date ?? payload.breachDate ?? payload.createdAt) ?? 'undated';
+      return `SERASA:${eventType}:${agreementId}:${installmentNumber ?? 'FULL'}:${eventDate}`;
+    }
+    const debtId = this.asString(payload.debtId) ?? payload.debtIds?.[0];
+    if (!debtId) return undefined;
+    return `SERASA:${eventType}:${debtId}:${this.asString(payload.createdAt) ?? 'undated'}`;
+  }
+
+  /** Keeps the contract's visible interaction history aligned with Serasa webhooks. */
+  private async recordSerasaWebhookInteraction(
+    contractId: string,
+    eventType: string,
+    payload: WebhookPayload,
+    transactionId?: string,
+  ): Promise<void> {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { accountId: true, walletId: true },
+    });
+    if (!contract) return;
+
+    const httpStatus = Number(payload.status ?? 200);
+    const failed = Number.isFinite(httpStatus) && httpStatus >= 400;
+    const externalId = transactionId
+      ?? this.asString(payload.agreementId)
+      ?? this.asString(payload.debtId)
+      ?? payload.debtIds?.[0]
+      ?? null;
+
+    await this.prisma.contractInteraction.create({
+      data: {
+        accountId: contract.accountId,
+        walletId: contract.walletId,
+        contractId,
+        channel: InteractionChannel.SERASA,
+        status: failed ? InteractionStatus.FAILED : InteractionStatus.COMPLETED,
+        provider: 'SERASA_LNOP',
+        externalId,
+        summary: this.serasaWebhookSummary(eventType, failed, payload),
+        payload: payload as any,
+      },
+    });
+  }
+
+  private serasaWebhookSummary(eventType: string, failed: boolean, payload: WebhookPayload): string {
+    if (failed) {
+      const details = this.asString(payload.errorMessage) ?? this.asString(payload.errorCode);
+      return `Serasa: retorno de ${eventType} com falha${details ? `: ${details}` : ''}.`;
+    }
+    const labels: Record<string, string> = {
+      DebtCreatedEvent: 'Dívida incluída na Serasa.',
+      DebtUpdatedEvent: 'Dívida atualizada na Serasa.',
+      DebtRemovedEvent: 'Dívida removida da Serasa.',
+      ClosedAgreementEvent: 'Acordo efetivado na Serasa.',
+      BreachedAgreementEvent: 'Acordo quebrado na Serasa.',
+      PaidInstallmentEvent: 'Parcela de acordo recebida pela Serasa.',
+      PaidAgreementEvent: 'Acordo quitado pela Serasa.',
+    };
+    return labels[eventType] ?? `Webhook ${eventType} recebido da Serasa.`;
   }
 
   private asRecord(value: unknown): Record<string, any> | null {

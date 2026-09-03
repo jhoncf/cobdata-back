@@ -10,6 +10,7 @@ import { ListCreditorsQueryDto } from './dto/list-creditors-query.dto';
 import { PaginatedResponse } from '../common/dto';
 import { Creditor } from '@prisma/client';
 import { CreditorWebhookService } from './creditor-webhook.service';
+import { UpsertCommercialRulesDto } from './dto/upsert-commercial-rules.dto';
 
 @Injectable()
 export class CreditorsService {
@@ -158,6 +159,77 @@ export class CreditorsService {
         data: { deletedAt: now },
       }),
     ]);
+  }
+
+  async getCommercialRules(id: string, accountId: string) {
+    await this.findById(id, accountId);
+    return this.prisma.creditor.findUniqueOrThrow({
+      where: { id },
+      select: {
+        discountBands: { orderBy: { minAgingDays: 'asc' } },
+        commissionPercent: true,
+      },
+    });
+  }
+
+  async upsertCommercialRules(id: string, dto: UpsertCommercialRulesDto, accountId: string) {
+    await this.findById(id, accountId);
+    this.validateBands(dto.discountBands, 'desconto');
+
+    await this.prisma.$transaction(async (tx) => {
+      const wallets = await tx.wallet.findMany({
+        where: { creditorId: id, deletedAt: null },
+        include: { discountBands: true },
+      });
+      await tx.creditorDiscountBand.deleteMany({ where: { creditorId: id } });
+      await tx.creditor.update({ where: { id }, data: { commissionPercent: dto.commissionPercent } });
+      if (dto.discountBands.length) {
+        await tx.creditorDiscountBand.createMany({ data: dto.discountBands.map((band) => ({
+          creditorId: id,
+          minAgingDays: band.minAgingDays,
+          maxAgingDays: band.maxAgingDays ?? null,
+          cashDiscountPercent: band.cashDiscountPercent,
+          installmentDiscountPercent: band.installmentDiscountPercent,
+        })) });
+      }
+      // A carteira conserva sua estratégia quando a mesma faixa continuar
+      // existindo. Se o credor mudar a faixa, ela nasce com o desconto global
+      // da carteira, sempre limitado pelo novo teto comercial.
+      for (const wallet of wallets) {
+        await tx.walletDiscountBand.deleteMany({ where: { walletId: wallet.id } });
+        if (dto.discountBands.length) {
+          await tx.walletDiscountBand.createMany({ data: dto.discountBands.map((band) => {
+            const previous = wallet.discountBands.find((item) => item.minAgingDays === band.minAgingDays && item.maxAgingDays === (band.maxAgingDays ?? null));
+            const cashStrategy = Math.min(Number(previous?.cashStrategyDiscountPercent ?? wallet.cobcomDiscountPercent), band.cashDiscountPercent);
+            const installmentStrategy = Math.min(Number(previous?.installmentStrategyDiscountPercent ?? wallet.cobcomDiscountPercent), band.installmentDiscountPercent);
+            return {
+              walletId: wallet.id,
+              minAgingDays: band.minAgingDays,
+              maxAgingDays: band.maxAgingDays ?? null,
+              cashDiscountPercent: band.cashDiscountPercent,
+              installmentDiscountPercent: band.installmentDiscountPercent,
+              cashStrategyDiscountPercent: cashStrategy,
+              installmentStrategyDiscountPercent: installmentStrategy,
+            };
+          }) });
+        }
+      }
+    });
+    return this.getCommercialRules(id, accountId);
+  }
+
+  private validateBands(bands: Array<{ minAgingDays: number; maxAgingDays?: number | null }>, label: string) {
+    const ordered = [...bands].sort((a, b) => a.minAgingDays - b.minAgingDays);
+    for (let index = 0; index < ordered.length; index++) {
+      const band = ordered[index]!;
+      if (band.maxAgingDays !== undefined && band.maxAgingDays !== null && band.maxAgingDays < band.minAgingDays) {
+        throw new ConflictException(`Faixa de ${label} possui fim menor que o início.`);
+      }
+      const previous = ordered[index - 1];
+      if (previous && (previous.maxAgingDays === undefined || previous.maxAgingDays === null || previous.maxAgingDays >= band.minAgingDays)) {
+        throw new ConflictException(`Faixas de ${label} não podem se sobrepor.`);
+      }
+    }
   }
 
   private async getCreditorIdsInScopes(walletIds: string[]): Promise<string[]> {

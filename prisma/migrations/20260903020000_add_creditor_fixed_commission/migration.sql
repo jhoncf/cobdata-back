@@ -1,0 +1,2 @@
+ALTER TABLE "Creditor"
+ADD COLUMN "commissionPercent" DECIMAL(5,2) NOT NULL DEFAULT 0;

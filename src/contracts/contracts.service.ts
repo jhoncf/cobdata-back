@@ -13,6 +13,7 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 import { BulkTransferContractsDto } from './dto/bulk-transfer-contracts.dto';
 import { Contract, ContractStatus, Prisma } from '@prisma/client';
 import { PaginatedResponse } from '../common/dto/paginated-response.dto';
+import { calculateOffer } from './offer-calculator';
 
 /**
  * Allowed serasaStatus values that permit editing/deleting a contract.
@@ -36,6 +37,42 @@ export class ContractsService {
     private readonly deduplicationService: DeduplicationService,
   ) {}
 
+  private calculateAgingDays(occurrenceDate: Date): number {
+    const dateParts = (date: Date) => {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(date);
+      const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
+      return Date.UTC(part('year'), part('month') - 1, part('day'));
+    };
+    return Math.max(0, Math.floor((dateParts(new Date()) - dateParts(occurrenceDate)) / 86_400_000));
+  }
+
+  private applyNumericComparison(
+    where: Prisma.ContractWhereInput,
+    field: 'updatedValue' | 'offerValue',
+    operator?: 'gt' | 'lt' | 'eq',
+    value?: number,
+  ): void {
+    if (!operator || value === undefined) return;
+    (where as any)[field] = {
+      [operator === 'eq' ? 'equals' : operator]: value,
+    };
+  }
+
+  /** Applies the persisted weekly aging snapshot. */
+  private applyAgingComparison(
+    where: Prisma.ContractWhereInput,
+    operator?: 'gt' | 'lt' | 'eq',
+    aging?: number,
+  ): void {
+    if (!operator || aging === undefined) return;
+
+    (where as any).agingDays = {
+      [operator === 'eq' ? 'equals' : operator]: aging,
+    };
+  }
+
   async createOrUpdate(
     dto: CreateContractDto,
     accountId: string,
@@ -43,6 +80,10 @@ export class ContractsService {
     // 1. Validate wallet exists, is ACTIVE, not deleted
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: dto.walletId, accountId, deletedAt: null },
+      include: {
+        discountBands: { orderBy: { minAgingDays: 'asc' } },
+        creditor: { include: { discountBands: { orderBy: { minAgingDays: 'asc' } } } },
+      },
     });
 
     if (!wallet) {
@@ -90,6 +131,32 @@ export class ContractsService {
     // Parse dueDate
     const dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
     const cancelledAt = dto.cancelledAt ? new Date(dto.cancelledAt) : null;
+    const agingDays = this.calculateAgingDays(occurrenceDate);
+    const ceilingBand = wallet.creditor.discountBands.find((band) =>
+      band.minAgingDays <= agingDays && (band.maxAgingDays === null || band.maxAgingDays >= agingDays),
+    );
+    const strategyBand = wallet.discountBands.find((band) =>
+      band.minAgingDays <= agingDays && (band.maxAgingDays === null || band.maxAgingDays >= agingDays),
+    );
+    const maximumDiscountPercent = Number(ceilingBand
+      ? (wallet.offerMaxInstallments > 1 ? ceilingBand.installmentDiscountPercent : ceilingBand.cashDiscountPercent)
+      : wallet.cobcomDiscountPercent);
+    const strategyDiscountPercent = Number(strategyBand
+      ? (wallet.offerMaxInstallments > 1 ? strategyBand.installmentStrategyDiscountPercent : strategyBand.cashStrategyDiscountPercent)
+      : wallet.cobcomDiscountPercent);
+    const offerDiscountPercent = Math.min(strategyDiscountPercent, maximumDiscountPercent);
+    const calculatedOffer = {
+      ...calculateOffer(dto.updatedValue, wallet),
+      offerDiscountPercent,
+      offerValue: Math.round(dto.updatedValue * (1 - offerDiscountPercent / 100) * 100) / 100,
+      maximumDiscountPercent,
+      repasseValue: Math.round(dto.updatedValue * (1 - maximumDiscountPercent / 100) * 100) / 100,
+      commissionPercent: wallet.creditor.commissionPercent,
+      commissionValue: Math.round(
+        (dto.updatedValue * (1 - maximumDiscountPercent / 100))
+        * Number(wallet.creditor.commissionPercent),
+      ) / 100,
+    };
 
     if (existingContract) {
       // 6a. If exists in SAME wallet → UPDATE (preserve unset fields)
@@ -101,11 +168,17 @@ export class ContractsService {
           contractNumber: dto.contractNumber,
           debtType: dto.debtType,
           occurrenceDate,
+          agingDays,
           originalValue: dto.originalValue,
           dueDate,
         };
 
         updateData.updatedValue = dto.updatedValue;
+        // A settled contract is a financial record. Its offer snapshot must
+        // never be replaced by a later import/upsert.
+        if (existingContract.paymentStatus !== 'PAID') {
+          Object.assign(updateData, calculatedOffer);
+        }
         if (dto.debtOrigin !== undefined) {
           updateData.debtOrigin = dto.debtOrigin;
           updateData.debtOriginDocHash = debtOriginDocHash;
@@ -158,9 +231,11 @@ export class ContractsService {
         contractNumber: dto.contractNumber,
         debtType: dto.debtType,
         occurrenceDate,
+        agingDays,
         dueDate,
         originalValue: dto.originalValue,
         updatedValue: dto.updatedValue,
+        ...calculatedOffer,
         debtOrigin: dto.debtOrigin ?? null,
         debtOriginDocHash,
         productName: dto.productName ?? null,
@@ -222,6 +297,9 @@ export class ContractsService {
         ...(filters.maxUpdatedValue !== undefined ? { lte: filters.maxUpdatedValue } : {}),
       };
     }
+    this.applyNumericComparison(where, 'updatedValue', filters.updatedValueOperator, filters.updatedValue);
+    this.applyNumericComparison(where, 'offerValue', filters.offerValueOperator, filters.offerValue);
+    this.applyAgingComparison(where, filters.agingOperator, filters.aging);
 
     const [matchedCount, transferred] = await this.prisma.$transaction([
       this.prisma.contract.count({ where }),
@@ -401,7 +479,7 @@ export class ContractsService {
     userRole: string,
     userScopes?: string[],
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, dateFrom, dateTo, debtorDocument, search, tags } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, debtorDocument, search, tags } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -465,8 +543,12 @@ export class ContractsService {
       };
     }
 
+    this.applyNumericComparison(where, 'updatedValue', updatedValueOperator, updatedValue);
+    this.applyNumericComparison(where, 'offerValue', offerValueOperator, offerValue);
+    this.applyAgingComparison(where, agingOperator, aging);
+
     if (dateFrom || dateTo) {
-      where.occurrenceDate = {};
+      where.occurrenceDate = { ...((where.occurrenceDate as object | undefined) ?? {}) };
       if (dateFrom) {
         (where.occurrenceDate as any).gte = new Date(dateFrom);
       }
@@ -601,6 +683,18 @@ export class ContractsService {
       }
     }
 
+    const offerWalletId = dto.walletId ?? contract.walletId;
+    const mustRecalculateOffer = dto.updatedValue !== undefined || dto.walletId !== undefined || dto.occurrenceDate !== undefined || dto.offerDiscountPercent !== undefined;
+    const offerWallet = mustRecalculateOffer
+      ? await this.prisma.wallet.findFirst({
+        where: { id: offerWalletId, accountId, deletedAt: null },
+        include: {
+          discountBands: { orderBy: { minAgingDays: 'asc' } },
+          creditor: { include: { discountBands: { orderBy: { minAgingDays: 'asc' } } } },
+        },
+      })
+      : null;
+
     // 5. Build update data (partial — only fields provided)
     const updateData: any = {};
 
@@ -656,8 +750,50 @@ export class ContractsService {
     if (dto.cancelledAt !== undefined) {
       updateData.cancelledAt = new Date(dto.cancelledAt);
     }
-    if (dto.offer !== undefined) {
+    if (dto.offer !== undefined && contract.paymentStatus !== 'PAID') {
       updateData.offer = dto.offer;
+    }
+    if (offerWallet && contract.paymentStatus !== 'PAID') {
+      Object.assign(updateData, calculateOffer(
+        dto.updatedValue ?? Number(contract.updatedValue),
+        offerWallet,
+      ));
+    }
+    if (dto.offerDiscountPercent !== undefined) {
+      if (contract.paymentStatus === 'PAID') {
+        throw new ConflictException('Não é possível alterar o desconto de um contrato pago.');
+      }
+      if (!offerWallet) throw new UnprocessableEntityException('Carteira comercial não encontrada.');
+
+      const occurrenceDate = dto.occurrenceDate ? new Date(dto.occurrenceDate) : contract.occurrenceDate;
+      const agingDays = this.calculateAgingDays(occurrenceDate);
+      const band = offerWallet.creditor.discountBands.find((item) =>
+        item.minAgingDays <= agingDays && (item.maxAgingDays === null || item.maxAgingDays >= agingDays),
+      );
+      const maximumDiscountPercent = Number(band
+        ? (offerWallet.offerMaxInstallments > 1 ? band.installmentDiscountPercent : band.cashDiscountPercent)
+        : offerWallet.cobcomDiscountPercent);
+      if (dto.offerDiscountPercent > maximumDiscountPercent) {
+        throw new UnprocessableEntityException(`O desconto informado excede o limite comercial de ${maximumDiscountPercent}%.`);
+      }
+
+      const updatedValue = dto.updatedValue ?? Number(contract.updatedValue);
+      const offerValue = Math.round(updatedValue * (1 - dto.offerDiscountPercent / 100) * 100) / 100;
+      const repasseValue = Math.round(updatedValue * (1 - maximumDiscountPercent / 100) * 100) / 100;
+      Object.assign(updateData, {
+        agingDays,
+        offerDiscountPercent: dto.offerDiscountPercent,
+        maximumDiscountPercent,
+        offerValue,
+        repasseValue,
+        commissionPercent: offerWallet.creditor.commissionPercent,
+        commissionValue: Math.round(repasseValue * Number(offerWallet.creditor.commissionPercent) / 100 * 100) / 100,
+        offerFirstInstallmentDays: offerWallet.offerFirstInstallmentDays,
+        offerMaxInstallments: Math.min(
+          offerWallet.offerMaxInstallments,
+          Math.max(1, Math.floor(offerValue / Number(offerWallet.offerMinInstallmentValue))),
+        ),
+      });
     }
 
     // serasaStatus is NEVER editable via PATCH — ignored if present in body

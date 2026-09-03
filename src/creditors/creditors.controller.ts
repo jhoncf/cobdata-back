@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Delete,
   Param,
   Body,
@@ -14,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CreditorsService } from './creditors.service';
-import { CreateCreditorDto, UpdateCreditorDto, ListCreditorsQueryDto } from './dto';
+import { CreateCreditorDto, UpdateCreditorDto, ListCreditorsQueryDto, UpsertCommercialRulesDto } from './dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators';
@@ -86,6 +87,24 @@ export class CreditorsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.creditorsService.update(id, dto, user.accountId);
+  }
+
+  @Get(':id/commercial-rules')
+  @ApiOperation({ summary: 'Get creditor discount and commission bands' })
+  async getCommercialRules(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.creditorsService.getCommercialRules(id, user.accountId);
+  }
+
+  @Put(':id/commercial-rules')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @Audit({ action: 'CREDITOR_COMMERCIAL_RULES_UPDATE', resourceType: 'Creditor' })
+  @ApiOperation({ summary: 'Replace creditor discount and commission bands' })
+  async upsertCommercialRules(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpsertCommercialRulesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.creditorsService.upsertCommercialRules(id, dto, user.accountId);
   }
 
   @Delete(':id')

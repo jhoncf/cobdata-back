@@ -1,0 +1,1 @@
+ALTER TYPE "InteractionChannel" ADD VALUE IF NOT EXISTS 'SERASA';

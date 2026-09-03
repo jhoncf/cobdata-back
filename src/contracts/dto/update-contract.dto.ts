@@ -32,6 +32,13 @@ export class UpdateContractDto {
   @Max(999999999.99)
   updatedValue?: number;
 
+  @ApiPropertyOptional({ description: 'Contract-specific CobCom discount, limited by the wallet commercial reference', example: 25, minimum: 0, maximum: 100 })
+  @IsOptional()
+  @IsNumber({}, { message: 'offerDiscountPercent must be a number' })
+  @Min(0)
+  @Max(100)
+  offerDiscountPercent?: number;
+
   @ApiPropertyOptional({ description: 'Occurrence date (ISO 8601)', example: '2024-01-15' })
   @IsOptional()
   @IsDateString({}, { message: 'occurrenceDate must be a valid ISO 8601 date string' })

@@ -9,6 +9,7 @@ import { Readable } from 'stream';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
 import { normalizeColumnMapping, normalizeImportLine } from '../utils/import-line.util';
+import { calculateOffer } from '../../contracts/offer-calculator';
 
 export interface ApplicationJobData {
   batchId: string;
@@ -119,6 +120,17 @@ export class ApplicationProcessor extends WorkerHost {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  private static calculateAgingDays(occurrenceDate: Date): number {
+    const dateParts = (date: Date) => {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(date);
+      const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
+      return Date.UTC(part('year'), part('month') - 1, part('day'));
+    };
+    return Math.max(0, Math.floor((dateParts(new Date()) - dateParts(occurrenceDate)) / 86_400_000));
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
@@ -135,7 +147,13 @@ export class ApplicationProcessor extends WorkerHost {
       const batch = await this.prisma.importBatch.findUnique({
         where: { id: batchId },
         include: {
-          wallet: { select: { id: true, creditorId: true } },
+          wallet: {
+            select: {
+              id: true, creditorId: true, cobcomDiscountPercent: true,
+              offerFirstInstallmentDays: true, offerMinInstallmentValue: true,
+              offerMaxInstallments: true,
+            },
+          },
         },
       });
 
@@ -177,6 +195,7 @@ export class ApplicationProcessor extends WorkerHost {
           const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']);
           const dueDate = ApplicationProcessor.toValidDate(line['dueDate']);
           const originalValue = parseFloat(line['originalValue'] || '0');          const updatedValue = parseFloat(line['updatedValue'] || '');
+          const calculatedOffer = calculateOffer(updatedValue, batch.wallet);
           const debtOrigin = line['debtOrigin'] || null;
           const productName = line['productName']?.trim() || null;
           const debtorStreet = line['debtorStreet']?.trim() || null;
@@ -197,6 +216,7 @@ export class ApplicationProcessor extends WorkerHost {
             ignoredCount++;
             continue;
           }
+          const agingDays = ApplicationProcessor.calculateAgingDays(occurrenceDate);
 
           // Compute deduplication key
           const deduplicationKey =
@@ -247,6 +267,7 @@ export class ApplicationProcessor extends WorkerHost {
               debtorEmail: true,
               cancelledAt: true,
               status: true,
+              paymentStatus: true,
               deletedAt: true,
             },
           })
@@ -259,7 +280,7 @@ export class ApplicationProcessor extends WorkerHost {
                 debtorAddressNumber: true, debtorAddressComplement: true,
                 debtorNeighborhood: true, debtorCity: true, debtorState: true,
                 debtorZipCode: true, debtorPhone: true, debtorEmail: true,
-                cancelledAt: true, status: true, deletedAt: true,
+                cancelledAt: true, status: true, paymentStatus: true, deletedAt: true,
               },
             });
 
@@ -275,9 +296,11 @@ export class ApplicationProcessor extends WorkerHost {
                 contractNumber,
                 debtType: debtType as any,
                 occurrenceDate,
+                agingDays,
                 dueDate,
                 originalValue,
                 updatedValue,
+                ...calculatedOffer,
                 debtOrigin,
                 debtOriginDocHash,
                 productName,
@@ -355,9 +378,11 @@ export class ApplicationProcessor extends WorkerHost {
                 contractNumber,
                 debtType: debtType as any,
                 occurrenceDate,
+                agingDays,
                 dueDate,
                 originalValue,
                 updatedValue,
+                ...(existingContract.paymentStatus !== 'PAID' ? calculatedOffer : {}),
                 debtOrigin,
                 debtOriginDocHash,
                 deduplicationKey,
@@ -413,9 +438,11 @@ export class ApplicationProcessor extends WorkerHost {
               contractNumber,
               debtType: debtType as any,
               occurrenceDate,
+              agingDays,
               dueDate,
               originalValue,
               updatedValue,
+              ...(existingContract.paymentStatus !== 'PAID' ? calculatedOffer : {}),
               debtOrigin,
               debtOriginDocHash,
               productName,

@@ -52,6 +52,12 @@ export interface OperationContractFilters {
   maxOriginalValue?: number;
   minUpdatedValue?: number;
   maxUpdatedValue?: number;
+  updatedValueOperator?: 'gt' | 'lt' | 'eq';
+  updatedValue?: number;
+  offerValueOperator?: 'gt' | 'lt' | 'eq';
+  offerValue?: number;
+  agingOperator?: 'gt' | 'lt' | 'eq';
+  aging?: number;
   dateFrom?: string;
   dateTo?: string;
 }
@@ -73,6 +79,22 @@ export class OperationsService {
     private readonly operationQueue: Queue,
   ) {}
 
+  private applyAgingComparison(where: any, operator?: 'gt' | 'lt' | 'eq', aging?: number) {
+    if (!operator || aging === undefined) return;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date());
+    const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
+    const today = new Date(Date.UTC(part('year'), part('month') - 1, part('day')));
+    const day = (offset: number) => new Date(today.getTime() + offset * 86_400_000);
+    const condition = operator === 'gt'
+      ? { lt: day(-aging) }
+      : operator === 'lt'
+        ? { gte: day(-(aging - 1)) }
+        : { gte: day(-aging), lt: day(-(aging - 1)) };
+    where.occurrenceDate = { ...(where.occurrenceDate ?? {}), ...condition };
+  }
+
   /**
    * Preview eligible contracts for a provider operation without creating one.
    * Returns count and batch information.
@@ -85,17 +107,7 @@ export class OperationsService {
     if (!wallet) {
       throw new UnprocessableEntityException('Wallet não encontrada');
     }
-    if (!wallet.serasaWalletId) {
-      throw new UnprocessableEntityException('Selecione e salve uma Carteira Serasa na carteira CRM antes de sincronizar contratos');
-    }
-
-    const walletMapping = await this.prisma.walletMapping.findFirst({
-      where: { walletId },
-    });
-
-    if (!walletMapping) {
-      throw new UnprocessableEntityException('Wallet não possui mapeamento com provedor');
-    }
+    await this.getSerasaProvider(accountId);
 
     const eligibleStatuses = this.getEligibleStatuses(action);
     const contracts = await this.selectEligibleContracts(walletId, action, eligibleStatuses, filters);
@@ -115,7 +127,7 @@ export class OperationsService {
   async create(params: CreateOperationParams) {
     const { walletId, action, userId, accountId, filters = {} } = params;
 
-    // Validate wallet exists and has an active provider mapping
+    // Validate wallet and configured Serasa provider.
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: walletId, accountId, deletedAt: null },
     });
@@ -123,23 +135,8 @@ export class OperationsService {
     if (!wallet) {
       throw new UnprocessableEntityException('Wallet não encontrada');
     }
-    if (!wallet.serasaWalletId) {
-      throw new UnprocessableEntityException('Selecione e salve uma Carteira Serasa na carteira CRM antes de sincronizar contratos');
-    }
-
-    // Find provider with mapping for this wallet
-    const walletMapping = await this.prisma.walletMapping.findFirst({
-      where: { walletId },
-      include: { provider: true },
-    });
-
-    if (!walletMapping) {
-      throw new UnprocessableEntityException(
-        'Wallet não possui mapeamento com provedor',
-      );
-    }
-
-    const providerId = walletMapping.providerId;
+    const provider = await this.getSerasaProvider(accountId);
+    const providerId = provider.id;
 
     // Select eligible contracts
     const eligibleStatuses = this.getEligibleStatuses(action);
@@ -240,14 +237,10 @@ export class OperationsService {
   ) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, accountId, deletedAt: null, status: ContractStatus.ACTIVE },
-      include: { wallet: { select: { serasaWalletId: true } } },
+      include: { wallet: { select: { id: true } } },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
-    if (!contract.wallet.serasaWalletId) {
-      throw new UnprocessableEntityException(
-        'Selecione e salve uma Carteira Serasa na carteira CRM antes de sincronizar contratos',
-      );
-    }
+    const provider = await this.getSerasaProvider(accountId);
     const eligibleStatuses = action === OperationAction.REMOVE
       ? [...ELIGIBLE_FOR_REMOVE, SerasaStatus.SENT]
       : ELIGIBLE_FOR_CREATE;
@@ -262,19 +255,11 @@ export class OperationsService {
       throw new ConflictException('Não foi encontrada a identificação da dívida na Serasa para removê-la');
     }
 
-    const mapping = await this.prisma.walletMapping.findFirst({
-      where: { walletId: contract.walletId },
-      include: { provider: true },
-    });
-    if (!mapping || mapping.provider.type !== 'SERASA_LNOP') {
-      throw new UnprocessableEntityException('A carteira CRM não possui uma carteira Serasa vinculada');
-    }
-
     const operation = await this.prisma.$transaction(async (tx) => {
       const op = await tx.providerOperation.create({
         data: {
           accountId,
-          providerId: mapping.providerId,
+          providerId: provider.id,
           walletId: contract.walletId,
           userId,
           action,
@@ -298,10 +283,21 @@ export class OperationsService {
 
     await this.operationQueue.add(
       `operation-contract-${operation.id}`,
-      { operationId: operation.id, batchIndex: 0, providerId: mapping.providerId, action },
+      { operationId: operation.id, batchIndex: 0, providerId: provider.id, action },
       { attempts: 1 },
     );
     return { id: operation.id, status: operation.status, contractId: contract.id };
+  }
+
+  private async getSerasaProvider(accountId: string) {
+    const provider = await this.prisma.provider.findFirst({
+      where: { accountId, type: 'SERASA_LNOP' },
+      select: { id: true },
+    });
+    if (!provider) {
+      throw new UnprocessableEntityException('A integração da Serasa não está ativa para esta conta');
+    }
+    return provider;
   }
 
   /** Removes a Serasa debt after it was paid through another payment channel. */
@@ -588,8 +584,16 @@ export class OperationsService {
         ...(filters.maxUpdatedValue !== undefined ? { lte: filters.maxUpdatedValue } : {}),
       };
     }
+    if (filters.updatedValueOperator && filters.updatedValue !== undefined) {
+      where.updatedValue = { [filters.updatedValueOperator === 'eq' ? 'equals' : filters.updatedValueOperator]: filters.updatedValue };
+    }
+    if (filters.offerValueOperator && filters.offerValue !== undefined) {
+      where.offerValue = { [filters.offerValueOperator === 'eq' ? 'equals' : filters.offerValueOperator]: filters.offerValue };
+    }
+    this.applyAgingComparison(where, filters.agingOperator, filters.aging);
     if (filters.dateFrom || filters.dateTo) {
       where.occurrenceDate = {
+        ...(where.occurrenceDate ?? {}),
         ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
         ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
       };

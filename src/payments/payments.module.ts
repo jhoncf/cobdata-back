@@ -10,6 +10,7 @@ import { BancoDoBrasilHttpClient } from './adapters/banco-do-brasil/bb-http-clie
 import { BancoDoBrasilAuthService } from './adapters/banco-do-brasil/bb-auth.service';
 import { SettlementProcessorService } from './settlement/settlement-processor.service';
 import { ChargeLifecycleJob } from './charge-lifecycle.job';
+import { AgreementLifecycleJob } from './agreement-lifecycle.job';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../providers/crypto.service';
 import { ConfigService } from '@nestjs/config';
@@ -31,6 +32,7 @@ import { ProvidersModule } from '../providers/providers.module';
     PaymentChargesService,
     SettlementProcessorService,
     ChargeLifecycleJob,
+    AgreementLifecycleJob,
     PrismaService,
     CryptoService,
     ConfigService,

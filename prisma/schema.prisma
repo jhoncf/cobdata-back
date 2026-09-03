@@ -123,6 +123,7 @@ enum InteractionChannel {
   SMS
   WHATSAPP
   EMAIL
+  SERASA
 }
 
 enum InteractionStatus {
@@ -178,20 +179,20 @@ model Account {
 }
 
 model ApiKey {
-  id          String        @id @default(uuid())
-  accountId   String
-  creditorId  String?
-  accessAllCreditors Boolean @default(false)
-  name        String
-  tokenPrefix String
-  tokenHash   String        @unique
-  scopes      ApiKeyScope[]
-  lastUsedAt  DateTime?
-  revokedAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                 String        @id @default(uuid())
+  accountId          String
+  creditorId         String?
+  accessAllCreditors Boolean       @default(false)
+  name               String
+  tokenPrefix        String
+  tokenHash          String        @unique
+  scopes             ApiKeyScope[]
+  lastUsedAt         DateTime?
+  revokedAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  account  Account  @relation(fields: [accountId], references: [id])
+  account  Account   @relation(fields: [accountId], references: [id])
   creditor Creditor? @relation(fields: [creditorId], references: [id])
 
   @@index([accountId, revokedAt])
@@ -263,40 +264,82 @@ model Invite {
 // ============ BUSINESS ============
 
 model Creditor {
-  id        String    @id @default(uuid())
-  accountId String
-  name      String
-  cnpj      String?   @unique
-  contacts  Json?
-  address   Json?
-  webhookUrl String?
+  id                      String    @id @default(uuid())
+  accountId               String
+  name                    String
+  cnpj                    String?   @unique
+  contacts                Json?
+  address                 Json?
+  webhookUrl              String?
   webhookAuthKeyEncrypted String?
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  /// Fixed CobCom fee applied over the creditor's repasse value.
+  commissionPercent       Decimal   @default(0) @db.Decimal(5, 2)
+  deletedAt               DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   account Account  @relation(fields: [accountId], references: [id])
   wallets Wallet[]
   apiKeys ApiKey[]
+  discountBands   CreditorDiscountBand[]
+  commissionBands CreditorCommissionBand[]
+}
+
+/// Commercial maximums negotiated with a creditor for each debt-age range.
+model CreditorDiscountBand {
+  id                         String   @id @default(uuid())
+  creditorId                 String
+  minAgingDays               Int
+  maxAgingDays               Int?
+  cashDiscountPercent        Decimal  @db.Decimal(5, 2)
+  installmentDiscountPercent Decimal  @db.Decimal(5, 2)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  creditor Creditor @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+
+  @@index([creditorId, minAgingDays])
+}
+
+/// CobCom fee negotiated with a creditor for each debt-age range.
+model CreditorCommissionBand {
+  id                String   @id @default(uuid())
+  creditorId        String
+  minAgingDays      Int
+  maxAgingDays      Int?
+  commissionPercent Decimal  @db.Decimal(5, 2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  creditor Creditor @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+
+  @@index([creditorId, minAgingDays])
 }
 
 model Wallet {
-  id             String       @id @default(uuid())
-  accountId      String
-  creditorId     String
-  serasaWalletId String?
-  isApiDefault   Boolean      @default(false)
-  cobcomDiscountPercent Decimal @default(0) @db.Decimal(5, 2)
-  name           String
-  status         WalletStatus @default(ACTIVE)
-  deletedAt      DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                        String       @id @default(uuid())
+  accountId                 String
+  creditorId                String
+  serasaWalletId            String?
+  isApiDefault              Boolean      @default(false)
+  cobcomDiscountPercent     Decimal      @default(0) @db.Decimal(5, 2)
+  offerFirstInstallmentDays Int          @default(5)
+  offerMinInstallmentValue  Decimal      @default(0.01) @db.Decimal(15, 2)
+  offerMaxInstallments      Int          @default(1)
+  /// Legacy snapshot retained for historical compatibility. New offers always
+  /// read the fixed commission directly from the creditor's commercial policy.
+  commissionPercent         Decimal      @default(0) @db.Decimal(5, 2)
+  name                      String
+  status                    WalletStatus @default(ACTIVE)
+  deletedAt                 DateTime?
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
 
   account              Account               @relation(fields: [accountId], references: [id])
   creditor             Creditor              @relation(fields: [creditorId], references: [id])
   serasaWallet         SerasaWallet?         @relation(fields: [serasaWalletId], references: [id])
   contracts            Contract[]
+  discountBands        WalletDiscountBand[]
   importBatches        ImportBatch[]
   userScopes           UserScope[]
   walletMappings       WalletMapping[]
@@ -304,6 +347,25 @@ model Wallet {
   ligueLeadAgent       LigueLeadWalletAgent?
   ligueLeadDispatches  LigueLeadDispatch[]
   contractInteractions ContractInteraction[]
+}
+
+/// Wallet strategy by aging range. The creditor policy remains the live ceiling;
+/// these fields describe what this wallet is allowed to offer below that ceiling.
+model WalletDiscountBand {
+  id                         String   @id @default(uuid())
+  walletId                   String
+  minAgingDays               Int
+  maxAgingDays               Int?
+  cashDiscountPercent        Decimal  @db.Decimal(5, 2)
+  installmentDiscountPercent Decimal  @db.Decimal(5, 2)
+  cashStrategyDiscountPercent        Decimal? @db.Decimal(5, 2)
+  installmentStrategyDiscountPercent Decimal? @db.Decimal(5, 2)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, minAgingDays])
 }
 
 model LigueLeadWalletAgent {
@@ -446,49 +508,61 @@ model WhatsAppBotMessage {
 }
 
 model Contract {
-  id                      String         @id @default(uuid())
-  accountId               String
-  walletId                String
-  debtorDocument          String
-  debtorDocumentHash      String
-  debtorName              String         @default("")
-  contractNumber          String
-  debtType                DebtType
-  occurrenceDate          DateTime
-  dueDate                 DateTime?
-  originalValue           Decimal        @db.Decimal(15, 2)
-  updatedValue            Decimal        @db.Decimal(15, 2)
-  debtOrigin              String?
-  debtOriginDocHash       String?
-  productName             String?
-  debtorStreet            String?
-  debtorCity              String?
-  debtorPhone             String?
-  debtorEmail             String?
-  debtorAddressNumber     String?
-  debtorAddressComplement String?
-  debtorNeighborhood      String?
-  debtorState             String?
-  debtorZipCode           String?
-  isNegativated           Boolean        @default(false)
-  cancelledAt             DateTime?
-  offer                   Json?
-  deduplicationKey        String         @unique
-  serasaStatus            SerasaStatus   @default(NOT_ENABLED)
-  paymentStatus           PaymentStatus  @default(OPEN)
-  status                  ContractStatus @default(ACTIVE)
-  debtId                  String?
-  agreementReference      String?
-  agreementTotalAmount    Decimal?       @db.Decimal(15, 2)
-  totalInstallments       Int?
-  paidInstallments        Int            @default(0)
-  totalPaidAmount         Decimal        @default(0) @db.Decimal(15, 2)
-  lastPaymentAt           DateTime?
-  acceptedDiscountPercent Decimal? @db.Decimal(5, 2)
-  agreedPaymentAmount     Decimal? @db.Decimal(15, 2)
-  deletedAt               DateTime?
-  createdAt               DateTime       @default(now())
-  updatedAt               DateTime       @updatedAt
+  id                        String         @id @default(uuid())
+  accountId                 String
+  walletId                  String
+  debtorDocument            String
+  debtorDocumentHash        String
+  debtorName                String         @default("")
+  contractNumber            String
+  debtType                  DebtType
+  occurrenceDate            DateTime
+  /// Whole-day age of the debt, refreshed on creation/import and every Monday.
+  agingDays                 Int            @default(0)
+  dueDate                   DateTime?
+  originalValue             Decimal        @db.Decimal(15, 2)
+  updatedValue              Decimal        @db.Decimal(15, 2)
+  debtOrigin                String?
+  debtOriginDocHash         String?
+  productName               String?
+  debtorStreet              String?
+  debtorCity                String?
+  debtorPhone               String?
+  debtorEmail               String?
+  debtorAddressNumber       String?
+  debtorAddressComplement   String?
+  debtorNeighborhood        String?
+  debtorState               String?
+  debtorZipCode             String?
+  isNegativated             Boolean        @default(false)
+  cancelledAt               DateTime?
+  offer                     Json?
+  offerValue                Decimal?       @db.Decimal(15, 2)
+  offerDiscountPercent      Decimal?       @db.Decimal(5, 2)
+  offerFirstInstallmentDays Int?
+  offerMaxInstallments      Int?
+  maximumDiscountPercent    Decimal?       @db.Decimal(5, 2)
+  repasseValue              Decimal?       @db.Decimal(15, 2)
+  commissionPercent         Decimal?       @db.Decimal(5, 2)
+  commissionValue           Decimal?       @db.Decimal(15, 2)
+  deduplicationKey          String         @unique
+  serasaStatus              SerasaStatus   @default(NOT_ENABLED)
+  paymentStatus             PaymentStatus  @default(OPEN)
+  status                    ContractStatus @default(ACTIVE)
+  debtId                    String?
+  agreementReference        String?
+  agreementTotalAmount      Decimal?       @db.Decimal(15, 2)
+  agreementInstallments     Json?
+  agreementDueAt            DateTime?
+  totalInstallments         Int?
+  paidInstallments          Int            @default(0)
+  totalPaidAmount           Decimal        @default(0) @db.Decimal(15, 2)
+  lastPaymentAt             DateTime?
+  acceptedDiscountPercent   Decimal?       @db.Decimal(5, 2)
+  agreedPaymentAmount       Decimal?       @db.Decimal(15, 2)
+  deletedAt                 DateTime?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
 
   account                Account                 @relation(fields: [accountId], references: [id])
   wallet                 Wallet                  @relation(fields: [walletId], references: [id])

@@ -6,7 +6,7 @@ import {
   UnprocessableEntityException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { PaymentStatus, Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -277,6 +277,7 @@ export class PaymentChargesService {
 
       // Create payment event
       await this.createPaymentEvent(charge.id, null, PaymentChargeStatus.ISSUED, PaymentEventSource.MANUAL);
+      await this.registerAgreementFromIssuedCharge(contract, charge);
 
       // Audit
       await this.auditService.log({
@@ -340,7 +341,7 @@ export class PaymentChargesService {
       );
     }
 
-    // The CobCom wallet discount is calculated once at issuance and stored on the charge.
+    // The contract has an offer snapshot; legacy records fall back to its wallet rule.
     if (!contract.updatedValue || parseFloat(contract.updatedValue.toString()) <= 0) {
       throw new UnprocessableEntityException(
         'Contract does not have a valid updatedValue for Pix issuance',
@@ -349,11 +350,14 @@ export class PaymentChargesService {
 
     // Resolve default gateway for PIX
     const discountPercent = new Prisma.Decimal(contract.wallet.cobcomDiscountPercent ?? 0);
-    const amount = new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(discountPercent)).div(100).toDecimalPlaces(2);
+    const amount = contract.offerValue
+      ? new Prisma.Decimal(contract.offerValue)
+      : new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(discountPercent)).div(100).toDecimalPlaces(2);
     if (amount.lessThanOrEqualTo(0)) throw new UnprocessableEntityException('O desconto configurado gera um valor inválido para Pix.');
     const gateway = await this.resolvePixGateway(accountId);
     const existingPix = await this.findExistingValidPix(contractId, gateway.id);
     if (existingPix) {
+      await this.registerAgreementFromIssuedCharge(contract, existingPix);
       return existingPix;
     }
     const config = this.paymentGatewaysService.decryptCredentials(gateway);
@@ -413,6 +417,7 @@ export class PaymentChargesService {
       });
 
       await this.createPaymentEvent(charge.id, null, PaymentChargeStatus.ISSUED, PaymentEventSource.MANUAL);
+      await this.registerAgreementFromIssuedCharge(contract, charge);
 
       await this.auditService.log({
         action: 'PAYMENT_CHARGE_PIX_ISSUED',
@@ -514,6 +519,7 @@ export class PaymentChargesService {
     const gateway = await this.resolvePixGateway(accountId);
     const existingPix = await this.findExistingValidPix(contract.id, gateway.id);
     if (existingPix) {
+      await this.registerAgreementFromIssuedCharge(contract, existingPix);
       return existingPix;
     }
     const config = this.paymentGatewaysService.decryptCredentials(gateway);
@@ -572,6 +578,7 @@ export class PaymentChargesService {
       });
 
       await this.createPaymentEvent(charge.id, null, PaymentChargeStatus.ISSUED, PaymentEventSource.MANUAL);
+      await this.registerAgreementFromIssuedCharge(contract, charge);
 
       await this.auditService.log({
         action: 'PAYMENT_CHARGE_PIX_BY_DOCUMENT',
@@ -604,6 +611,38 @@ export class PaymentChargesService {
         supportReference: failedCharge.id,
       });
     }
+  }
+
+  /**
+   * A Pix issued for an offer is an agreement attempt. The Pix itself can
+   * expire in 24 hours, while the commercial deadline belongs to the wallet
+   * and remains valid for the configured first-payment period.
+   */
+  private async registerAgreementFromIssuedCharge(contract: any, charge: any): Promise<void> {
+    if (contract.paymentStatus === PaymentStatus.PAID || contract.paymentStatus === PaymentStatus.INSTALLMENT) {
+      return;
+    }
+
+    // Reissuing a Pix for an active agreement must not extend its deadline.
+    if (contract.paymentStatus === PaymentStatus.IN_AGREEMENT && contract.agreementDueAt) {
+      return;
+    }
+
+    const days = Math.max(1, Number(contract.wallet?.offerFirstInstallmentDays ?? 5));
+    const agreementDueAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+    await this.prisma.contract.update({
+      where: { id: contract.id },
+      data: {
+        paymentStatus: PaymentStatus.IN_AGREEMENT,
+        agreementReference: charge.externalId ?? charge.txid ?? charge.id,
+        agreementTotalAmount: charge.amount,
+        agreedPaymentAmount: charge.amount,
+        totalInstallments: 1,
+        paidInstallments: 0,
+        agreementDueAt,
+      },
+    });
   }
 
   // ─── 5.5 — List Charges ────────────────────────────────────────────────────

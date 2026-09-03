@@ -67,6 +67,9 @@ export class OperationProcessor extends WorkerHost {
               debtType: true,
               occurrenceDate: true,
               updatedValue: true,
+              offerValue: true,
+              offerFirstInstallmentDays: true,
+              offerMaxInstallments: true,
               debtOrigin: true,
               debtId: true,
               wallet: { select: { creditor: { select: { name: true, cnpj: true } } } },
@@ -122,17 +125,26 @@ export class OperationProcessor extends WorkerHost {
     operationId: string,
   ): Promise<void> {
     const payloads: DebtPayload[] = items.map((item) => {
-      const wallet = config.walletMappings.get(item.contract.walletId);
-      if (!wallet) throw new Error(`Carteira Serasa não configurada para o contrato ${item.contract.id}`);
       return {
         operationItemId: item.id,
         document: item.contract.debtorDocument,
         contractNumber: item.contract.contractNumber,
-        wallet,
+        wallet: 'PRE_CALCULADA',
         debtType: item.contract.debtType,
         occurrenceDate: item.contract.occurrenceDate.toISOString().slice(0, 10),
-        // Every negotiation channel, including Serasa, uses the current amount payable.
+        // The debt keeps its current value; Serasa receives the calculated offer separately.
         debtValue: Number(item.contract.updatedValue),
+        offer: {
+          value: Number(item.contract.offerValue ?? item.contract.updatedValue),
+          dueDaysFirstInstallment: item.contract.offerFirstInstallmentDays ?? 5,
+          maxInstallments: item.contract.offerMaxInstallments ?? 1,
+        },
+        ...(item.contract.wallet.creditor.cnpj ? {
+          debtOrigin: {
+            name: item.contract.wallet.creditor.name,
+            document: item.contract.wallet.creditor.cnpj.replace(/\D/g, ''),
+          },
+        } : {}),
       };
     });
 
@@ -282,7 +294,7 @@ export class OperationProcessor extends WorkerHost {
 
   /**
    * Build the ProviderConfig from the provider's encrypted credentials
-   * and wallet mappings.
+   * for the configured provider.
    */
   private async getProviderConfig(
     providerId: string,
@@ -290,7 +302,7 @@ export class OperationProcessor extends WorkerHost {
   ): Promise<ProviderConfig> {
     const provider = await this.prisma.provider.findUnique({
       where: { id: providerId },
-      include: { walletMappings: true },
+      include: {},
     });
 
     if (!provider) {
@@ -300,12 +312,6 @@ export class OperationProcessor extends WorkerHost {
     // Decrypt credentials
     const credentialsJson = this.cryptoService.decrypt(provider.credentials);
     const credentials = JSON.parse(credentialsJson);
-
-    // Build wallet mappings map
-    const walletMappings = new Map<string, string>();
-    for (const mapping of provider.walletMappings) {
-      walletMappings.set(mapping.walletId, mapping.externalWalletId);
-    }
 
     const environment = provider.environment as 'HOMOLOGATION' | 'PRODUCTION';
     const apiKey = credentials.apiKey || credentials.token;
@@ -318,7 +324,6 @@ export class OperationProcessor extends WorkerHost {
       apiKey,
       baseUrl: SERASA_BASE_URLS[environment],
       environment,
-      walletMappings,
     };
   }
 }

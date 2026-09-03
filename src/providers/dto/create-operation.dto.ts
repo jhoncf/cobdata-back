@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsUUID, Min, IsIn } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { ContractStatus, OperationAction, PaymentStatus, SerasaStatus } from '@prisma/client';
@@ -20,6 +20,12 @@ export class CreateOperationDto {
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) maxOriginalValue?: number;
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) minUpdatedValue?: number;
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) maxUpdatedValue?: number;
+  @IsOptional() @IsIn(['gt', 'lt', 'eq']) updatedValueOperator?: 'gt' | 'lt' | 'eq';
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) updatedValue?: number;
+  @IsOptional() @IsIn(['gt', 'lt', 'eq']) offerValueOperator?: 'gt' | 'lt' | 'eq';
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) offerValue?: number;
+  @IsOptional() @IsIn(['gt', 'lt', 'eq']) agingOperator?: 'gt' | 'lt' | 'eq';
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) aging?: number;
   @IsOptional() @IsDateString() dateFrom?: string;
   @IsOptional() @IsDateString() dateTo?: string;
 }

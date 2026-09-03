@@ -13,6 +13,7 @@ type ChatwootPayload = Record<string, any>;
 export class WhatsAppBotService {
   private readonly logger = new Logger(WhatsAppBotService.name);
   private readonly bedrock: BedrockRuntimeClient;
+  private chatwootBotAgentId?: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -27,29 +28,41 @@ export class WhatsAppBotService {
     this.authorize(tokens);
     const payload = raw as ChatwootPayload;
     if (payload?.event !== 'message_created' || payload?.message_type !== 'incoming' || payload?.private) return { accepted: false };
-    if (this.configuredInboxId() && String(payload.inbox?.id ?? payload.conversation?.inbox_id ?? '') !== this.configuredInboxId()) return { accepted: false };
+    const inboxId = String(payload.inbox?.id ?? payload.conversation?.inbox_id ?? '');
+    const allowedInboxIds = this.configuredInboxIds();
+    if (allowedInboxIds.size && !allowedInboxIds.has(inboxId)) return { accepted: false };
 
     const messageId = String(payload.id ?? '');
     const content = String(payload.content ?? '').trim();
     const chatwootConversationId = String(payload.conversation?.id ?? '');
-    const phone = this.phone(payload);
-    if (!messageId || !content || !chatwootConversationId || !phone) return { accepted: false };
+    const conversationKey = this.conversationKey(payload);
+    if (!messageId || !content || !chatwootConversationId || !conversationKey) return { accepted: false };
 
     const duplicate = await this.prisma.whatsAppBotMessage.findUnique({ where: { externalMessageId: messageId } });
     if (duplicate) return { accepted: true, duplicate: true };
 
     const accountId = this.config.getOrThrow<string>('WHATSAPP_BOT_ACCOUNT_ID');
     const conversation = await this.prisma.whatsAppBotConversation.upsert({
-      where: { conversationKey: phone },
-      create: { accountId, conversationKey: phone, chatwootConversationId },
+      where: { conversationKey },
+      create: { accountId, conversationKey, chatwootConversationId },
       update: { chatwootConversationId },
     });
+    // O Chatwoot pode atribuir conversas novas ao agente que criou/configurou a
+    // inbox. Reatribuir cada entrada ao token do bot evita que o atendimento
+    // automatizado apareça nominalmente como um operador humano.
+    await this.assignToChatwootBot(chatwootConversationId);
     const responses = await this.reply(conversation, content, messageId);
-    for (let index = 0; index < responses.length; index += 1) {
-      await this.sendToChatwoot(chatwootConversationId, responses[index]!);
-      // Chatwoot entrega cada saída de forma assíncrona à ponte WhatsApp.
-      // A pequena espera preserva a ordem: instrução, Pix copia e cola, link final.
-      if (index < responses.length - 1) await new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      for (let index = 0; index < responses.length; index += 1) {
+        const response = responses[index]!;
+        await this.setChatwootTyping(chatwootConversationId, true);
+        await new Promise((resolve) => setTimeout(resolve, this.typingDelay(response)));
+        await this.sendToChatwoot(chatwootConversationId, response);
+        // Mantém a ordem das mensagens independentes, como instrução e Pix.
+        if (index < responses.length - 1) await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } finally {
+      await this.setChatwootTyping(chatwootConversationId, false);
     }
     await this.prisma.whatsAppBotMessage.create({ data: { conversationId: conversation.id, externalMessageId: messageId, response: responses.join('\n\n---\n\n') } });
     return { accepted: true };
@@ -112,9 +125,10 @@ export class WhatsAppBotService {
   private async generatePix(conversation: any, debt: Debt, messageId: string) {
     try {
       const cpf = this.crypto.decrypt(conversation.debtorDocumentEncrypted);
-      const contract = await this.prisma.contract.findUnique({ where: { id: debt.id }, select: { offer: true } });
+      const contract = await this.prisma.contract.findUnique({ where: { id: debt.id }, select: { offer: true, debtorPhone: true } });
       const charge = await this.debts.generatePix(debt.id, cpf, `whatsapp:${messageId}`);
       if (!charge.pixCopyPaste) throw new Error('Cobrança Pix criada sem código copia e cola');
+      await this.captureWhatsAppPhone(debt.id, contract?.debtorPhone, this.phoneFromConversation(conversation));
       const expiration = charge.expiresAt ? new Date(charge.expiresAt).toLocaleString('pt-BR') : 'o prazo informado na cobrança';
       const offer = this.offerMessage(contract?.offer, charge.amount.toString());
       return [
@@ -178,6 +192,21 @@ export class WhatsAppBotService {
   }
   private phoneFromConversation(conversation: any) { return conversation.conversationKey ?? ''; }
 
+  /**
+   * O telefone vem do canal WhatsApp autenticado pelo próprio Chatwoot. Ele só
+   * é aproveitado depois que o interlocutor escolhe uma pendência e solicita
+   * o Pix, e nunca substitui um contato que já foi fornecido pelo credor.
+   */
+  private async captureWhatsAppPhone(contractId: string, currentPhone: string | null | undefined, sourcePhone: string) {
+    if (currentPhone?.trim()) return;
+    const phone = sourcePhone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, '');
+    if (phone.length < 10 || phone.length > 11) return;
+    await this.prisma.contract.updateMany({
+      where: { id: contractId, OR: [{ debtorPhone: null }, { debtorPhone: '' }] },
+      data: { debtorPhone: phone },
+    });
+  }
+
   private async intent(message: string): Promise<'PIX' | 'LINK' | 'UNKNOWN'> {
     const normalized = message.toLowerCase();
     if (/\b(link|site|pagina|página)\b/.test(normalized)) return 'LINK';
@@ -209,14 +238,84 @@ export class WhatsAppBotService {
     if (!response.ok) throw new Error(`Chatwoot recusou a resposta (${response.status})`);
   }
 
+  private async assignToChatwootBot(conversationId: string) {
+    const base = this.config.get<string>('CHATWOOT_API_URL');
+    const token = this.config.get<string>('CHATWOOT_API_ACCESS_TOKEN');
+    if (!base || !token) return;
+
+    try {
+      const agentId = await this.getChatwootBotAgentId(base, token);
+      const response = await fetch(`${base.replace(/\/$/, '')}/api/v1/accounts/${this.config.getOrThrow<string>('CHATWOOT_ACCOUNT_ID')}/conversations/${conversationId}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', api_access_token: token },
+        body: JSON.stringify({ assignee_id: agentId, team_id: null }),
+      });
+      if (!response.ok) this.logger.warn(`Não foi possível atribuir a conversa ao Assistente Virtual (${response.status})`);
+    } catch (error) {
+      this.logger.warn('Não foi possível atribuir a conversa ao Assistente Virtual', error instanceof Error ? error.message : undefined);
+    }
+  }
+
+  private async getChatwootBotAgentId(base: string, token: string) {
+    if (this.chatwootBotAgentId) return this.chatwootBotAgentId;
+    const configuredId = Number(this.config.get<string>('CHATWOOT_BOT_AGENT_ID'));
+    if (Number.isInteger(configuredId) && configuredId > 0) {
+      this.chatwootBotAgentId = configuredId;
+      return configuredId;
+    }
+    const response = await fetch(`${base.replace(/\/$/, '')}/api/v1/profile`, { headers: { api_access_token: token } });
+    if (!response.ok) throw new Error(`Perfil do bot não disponível (${response.status})`);
+    const profile = await response.json() as { id?: unknown };
+    const id = Number(profile.id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('Perfil do bot sem identificador válido');
+    this.chatwootBotAgentId = id;
+    return id;
+  }
+
+  private typingDelay(content: string) {
+    // Mantém a resposta humana, sem deixar o atendimento lento para mensagens longas.
+    return Math.min(2500, Math.max(900, 700 + Math.ceil(content.length / 35) * 250));
+  }
+
+  private async setChatwootTyping(conversationId: string, typing: boolean) {
+    const base = this.config.get<string>('CHATWOOT_API_URL');
+    const token = this.config.get<string>('CHATWOOT_API_ACCESS_TOKEN');
+    if (!base || !token) return;
+    try {
+      const response = await fetch(`${base.replace(/\/$/, '')}/api/v1/accounts/${this.config.getOrThrow<string>('CHATWOOT_ACCOUNT_ID')}/conversations/${conversationId}/toggle_typing_status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', api_access_token: token },
+        body: JSON.stringify({ typing_status: typing ? 'on' : 'off', is_private: false }),
+      });
+      if (!response.ok) this.logger.warn(`Não foi possível atualizar o indicador de digitação do Chatwoot (${response.status})`);
+    } catch (error) {
+      this.logger.warn('Não foi possível atualizar o indicador de digitação do Chatwoot', error instanceof Error ? error.message : undefined);
+    }
+  }
+
   private authorize(tokens: Array<string | undefined>) {
     const expected = this.config.get<string>('CHATWOOT_WEBHOOK_TOKEN');
     const valid = Boolean(expected) && tokens.some((token) => token && token.length === expected!.length && timingSafeEqual(Buffer.from(token), Buffer.from(expected!)));
     if (!valid) throw new UnauthorizedException('Webhook não autorizado');
   }
 
-  private configuredInboxId() { return this.config.get<string>('CHATWOOT_INBOX_ID') ?? ''; }
-  private phone(payload: ChatwootPayload) { return String(payload.sender?.phone_number ?? payload.conversation?.meta?.sender?.phone_number ?? payload.conversation?.contact_inbox?.source_id ?? '').replace(/\D/g, ''); }
+  private configuredInboxIds() {
+    const configured = this.config.get<string>('CHATWOOT_INBOX_IDS') ?? this.config.get<string>('CHATWOOT_INBOX_ID') ?? '';
+    return new Set(configured.split(',').map((value) => value.trim()).filter(Boolean));
+  }
+
+  /**
+   * O WhatsApp possui telefone; o widget web usa o identificador do contato.
+   * Ambos formam uma chave estável de conversa sem transformar o ID web em telefone.
+   */
+  private conversationKey(payload: ChatwootPayload) {
+    const phone = String(payload.sender?.phone_number ?? payload.conversation?.meta?.sender?.phone_number ?? '').replace(/\D/g, '');
+    // Mantém a chave histórica das conversas do WhatsApp, para não perder o
+    // estado de atendimentos que já estão em andamento.
+    if (phone) return phone;
+    const source = String(payload.conversation?.contact_inbox?.source_id ?? payload.sender?.id ?? payload.conversation?.meta?.sender?.id ?? '').trim();
+    return source ? `web:${source}` : '';
+  }
   private extractCpf(text: string) {
     const cpf = text.replace(/\D/g, '');
     if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return null;

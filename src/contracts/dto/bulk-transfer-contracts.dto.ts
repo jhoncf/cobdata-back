@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsUUID,
   Min,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -51,6 +52,42 @@ export class BulkTransferContractFiltersDto {
   @IsNumber()
   @Min(0)
   maxUpdatedValue?: number;
+
+  @ApiPropertyOptional({ enum: ['gt', 'lt', 'eq'] })
+  @IsOptional()
+  @IsIn(['gt', 'lt', 'eq'])
+  updatedValueOperator?: 'gt' | 'lt' | 'eq';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  updatedValue?: number;
+
+  @ApiPropertyOptional({ enum: ['gt', 'lt', 'eq'] })
+  @IsOptional()
+  @IsIn(['gt', 'lt', 'eq'])
+  offerValueOperator?: 'gt' | 'lt' | 'eq';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  offerValue?: number;
+
+  @ApiPropertyOptional({ enum: ['gt', 'lt', 'eq'] })
+  @IsOptional()
+  @IsIn(['gt', 'lt', 'eq'])
+  agingOperator?: 'gt' | 'lt' | 'eq';
+
+  @ApiPropertyOptional({ description: 'Dias desde a data de ocorrência' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  aging?: number;
 }
 
 export class BulkTransferContractsDto {

@@ -34,8 +34,11 @@ export class PublicDebtService {
       select: {
         id: true,
         contractNumber: true,
+        debtorName: true,
+        productName: true,
         dueDate: true,
         updatedValue: true,
+        offerValue: true,
         wallet: { select: { cobcomDiscountPercent: true, creditor: { select: { name: true, cnpj: true } } } },
       },
       orderBy: { dueDate: 'asc' },
@@ -44,8 +47,10 @@ export class PublicDebtService {
     return contracts.map((contract) => ({
       id: contract.id,
       contractNumber: contract.contractNumber,
+      debtorName: contract.debtorName,
+      productName: contract.productName,
       dueDate: contract.dueDate,
-      amount: new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(contract.wallet.cobcomDiscountPercent)).div(100).toDecimalPlaces(2).toString(),
+      amount: (contract.offerValue ?? new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(contract.wallet.cobcomDiscountPercent)).div(100).toDecimalPlaces(2)).toString(),
       updatedAmount: contract.updatedValue.toString(),
       cobcomDiscountPercent: contract.wallet.cobcomDiscountPercent.toString(),
       creditor: contract.wallet.creditor,

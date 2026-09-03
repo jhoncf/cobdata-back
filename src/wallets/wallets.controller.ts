@@ -89,6 +89,17 @@ export class WalletsController {
     return this.walletsService.update(id, dto, user.accountId);
   }
 
+  @Post('wallets/:id/recalculate-offers')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @Audit({ action: 'WALLET_OFFERS_RECALCULATED', resourceType: 'Wallet' })
+  @ApiOperation({ summary: 'Recalculate wallet offers', description: 'Persists the current wallet offer rules on every unpaid active contract.' })
+  async recalculateOffers(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.walletsService.recalculateOffers(id, user.accountId);
+  }
+
   @Delete('wallets/:id')
   @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)

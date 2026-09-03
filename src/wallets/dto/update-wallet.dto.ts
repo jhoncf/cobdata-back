@@ -1,5 +1,5 @@
-import { IsString, IsNotEmpty, MaxLength, IsOptional, IsIn, IsUUID, IsNumber, Min, Max } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsString, IsNotEmpty, MaxLength, IsOptional, IsIn, IsNumber, Min, Max, IsArray, ArrayMaxSize, ValidateNested, IsInt } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateWalletDto {
@@ -16,11 +16,25 @@ export class UpdateWalletDto {
   @IsIn(['ACTIVE', 'INACTIVE'])
   status?: 'ACTIVE' | 'INACTIVE';
 
-  @ApiPropertyOptional({ nullable: true, description: 'Carteira Serasa vinculada; envie null para desvincular' })
-  @IsOptional()
-  @IsUUID()
-  serasaWalletId?: string | null;
-
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) @Max(100)
   cobcomDiscountPercent?: number;
+
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(1) @Max(365)
+  offerFirstInstallmentDays?: number;
+
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0.01) @Max(999999999.99)
+  offerMinInstallmentValue?: number;
+
+  @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(1) @Max(999)
+  offerMaxInstallments?: number;
+
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => WalletDiscountBandDto)
+  discountBands?: WalletDiscountBandDto[];
+}
+
+export class WalletDiscountBandDto {
+  @Type(() => Number) @IsInt() @Min(0) minAgingDays!: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) maxAgingDays?: number | null;
+  @Type(() => Number) @IsNumber() @Min(0) @Max(100) cashDiscountPercent!: number;
+  @Type(() => Number) @IsNumber() @Min(0) @Max(100) installmentDiscountPercent!: number;
 }

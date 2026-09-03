@@ -7,6 +7,7 @@ import {
   IsArray,
   IsNumber,
   Min,
+  IsIn,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ContractStatus, SerasaStatus, PaymentStatus } from '@prisma/client';
@@ -56,6 +57,37 @@ export class ListContractsQueryDto extends PaginationDto {
   @IsNumber()
   @Min(0)
   maxUpdatedValue?: number;
+
+  @IsOptional()
+  @IsIn(['gt', 'lt', 'eq'])
+  updatedValueOperator?: 'gt' | 'lt' | 'eq';
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  updatedValue?: number;
+
+  @IsOptional()
+  @IsIn(['gt', 'lt', 'eq'])
+  offerValueOperator?: 'gt' | 'lt' | 'eq';
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  offerValue?: number;
+
+  @IsOptional()
+  @IsIn(['gt', 'lt', 'eq'])
+  agingOperator?: 'gt' | 'lt' | 'eq';
+
+  /** Days elapsed since the contract occurrence date. */
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  aging?: number;
 
   /** Filter contracts with an agreement in more than one installment. */
   @IsOptional()

@@ -53,7 +53,7 @@ describe('WebhooksService', () => {
         findFirst: jest.fn(),
         update: jest.fn().mockResolvedValue({}),
       },
-      contract: { update: jest.fn().mockResolvedValue({}) },
+      contract: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn().mockResolvedValue([]),
     };
 
@@ -174,6 +174,35 @@ describe('WebhooksService', () => {
           data: expect.objectContaining({ status: WebhookStatus.PROCESSED }),
         }),
       );
+    });
+
+    it('should process an agreement event matched only by debtId', async () => {
+      serasaAdapter.validateWebhookSignature.mockReturnValue(true);
+      prisma.provider.findUnique.mockResolvedValue(mockProvider);
+      prisma.webhookEvent.findUnique.mockResolvedValue(null);
+      prisma.webhookEvent.create.mockResolvedValue({ id: 'new-event-id' });
+      prisma.providerOperationItem.findFirst.mockResolvedValue(null);
+      prisma.contract.findFirst.mockResolvedValue({ id: 'contract-id' });
+      prisma.contract.update.mockResolvedValue({});
+      prisma.webhookEvent.update.mockResolvedValue({});
+
+      const payload: WebhookPayload = {
+        eventType: 'ClosedAgreementEvent',
+        debtIds: ['debt-001'],
+        agreementId: 'agreement-001',
+        totalInstallments: 2,
+      };
+
+      const result = await service.handleWebhook(headers, Buffer.from(JSON.stringify(payload)), payload);
+
+      expect(result.status).toBe(200);
+      expect(prisma.contract.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'contract-id' },
+        data: expect.objectContaining({ paymentStatus: 'INSTALLMENT', agreementReference: 'agreement-001' }),
+      }));
+      expect(prisma.webhookEvent.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ status: WebhookStatus.PROCESSED }),
+      }));
     });
   });
 
