@@ -544,7 +544,11 @@ export class ContractsService {
     }
 
     if (serasaStatus) {
-      where.serasaStatus = serasaStatus;
+      // Serasa returns 201 (created) and 204 (updated) for the same
+      // operational state: the debt is synchronized and active there.
+      where.serasaStatus = serasaStatus === 'SYNCED'
+        ? { in: ['REGISTERED', 'UPDATED'] }
+        : serasaStatus;
     }
 
     if (paymentStatus) {

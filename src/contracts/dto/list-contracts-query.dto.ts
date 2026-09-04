@@ -27,8 +27,8 @@ export class ListContractsQueryDto extends PaginationDto {
   status?: ContractStatus;
 
   @IsOptional()
-  @IsEnum(SerasaStatus)
-  serasaStatus?: SerasaStatus;
+  @IsIn([...Object.values(SerasaStatus), 'SYNCED'])
+  serasaStatus?: SerasaStatus | 'SYNCED';
 
   @IsOptional()
   @IsEnum(PaymentStatus)
