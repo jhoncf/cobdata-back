@@ -482,7 +482,7 @@ export class ContractsService {
     userScopes?: string[],
     portalCreditorId?: string | null,
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, debtorDocument, search, tags } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, debtorDocument, search, tags, sortBy, sortDirection } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -633,7 +633,9 @@ export class ContractsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: sortBy
+          ? [{ [sortBy]: sortDirection ?? 'asc' }, { createdAt: 'desc' }]
+          : { createdAt: 'desc' },
         include: { tags: { select: { tag: true } } },
       }),
       this.prisma.contract.count({ where }),
