@@ -16,7 +16,7 @@ import {
  * - Every contract appears in exactly one batch
  */
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 1;
 
 /**
  * Pure batching function extracted from business logic for testing.
