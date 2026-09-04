@@ -19,6 +19,8 @@ export interface WebhookPayload {
   status?: number;
   debtId?: string;
   debtIds?: string[];
+  contractNumber?: string;
+  document?: string;
   agreementId?: string;
   errorCode?: string;
   errorMessage?: string;
@@ -102,27 +104,56 @@ export class WebhooksService {
       },
     });
 
-    // 5. Correlate the event. Agreement lifecycle events from Serasa can omit
-    // transactionId and identify the debt only through debtId/debtIds.
-    // Prefer an operation item when a transaction is supplied, then fall back
-    // to the debt reference stored on the contract.
-    const operationItem = transactionId ? await this.prisma.providerOperationItem.findFirst({
-      where: { transactionId },
-      include: { contract: true },
-    }) : null;
-
+    // 5. Correlate the event to its specific contract before using the batch
+    // transactionId. Serasa uses one transactionId for an entire batch, while
+    // every DebtCreatedEvent carries its own debtId and contractNumber. Using
+    // only transactionId would incorrectly update the first contract of a
+    // batch for every callback.
     const debtIds = [payload.debtId, ...(payload.debtIds ?? [])].filter((id): id is string => !!id);
+    const contractNumber = this.asString(payload.contractNumber);
+    const document = this.asString(payload.document);
     const agreementId = this.asString(payload.agreementId);
     const agreementLifecycleEvent = ['BreachedAgreementEvent', 'PaidAgreementEvent', 'PaidInstallmentEvent'].includes(eventType);
-    let contract = operationItem?.contract ?? null;
+    let contract = null;
+
+    if (debtIds.length > 0) {
+      contract = await this.prisma.contract.findFirst({
+        where: { accountId: provider.accountId, debtId: { in: debtIds }, deletedAt: null },
+      });
+    }
+    if (!contract && contractNumber) {
+      contract = await this.prisma.contract.findFirst({
+        where: {
+          accountId: provider.accountId,
+          contractNumber,
+          deletedAt: null,
+          ...(document ? { debtorDocument: document } : {}),
+        },
+      });
+    }
+
+    // Once the contract is known, select its item within the batch. This keeps
+    // the operation timeline accurate even though its transactionId is shared.
+    let operationItem = contract ? await this.prisma.providerOperationItem.findFirst({
+      where: {
+        contractId: contract.id,
+        ...(transactionId ? { transactionId } : {}),
+      },
+      include: { contract: true },
+    }) : null;
+    if (!operationItem && transactionId) {
+      operationItem = await this.prisma.providerOperationItem.findFirst({
+        where: { transactionId },
+        include: { contract: true },
+      });
+    }
+    contract = contract ?? operationItem?.contract ?? null;
+
     // The official Serasa payload documents agreementId as the strong key for
     // breach and payment events. debtIds may be absent (or deprecated on a
     // breach), so never depend on it for these lifecycle updates.
     if (!contract && agreementLifecycleEvent && agreementId) {
       contract = await this.prisma.contract.findFirst({ where: { agreementReference: agreementId, deletedAt: null } });
-    }
-    if (!contract && debtIds.length > 0) {
-      contract = await this.prisma.contract.findFirst({ where: { debtId: { in: debtIds }, deletedAt: null } });
     }
     // ClosedAgreementEvent supplies debtIds while establishing a new
     // agreementReference, so agreementId remains a useful final fallback.
