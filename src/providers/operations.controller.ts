@@ -72,6 +72,18 @@ export class OperationsController {
     return this.operationsService.createForContract(contractId, user.id, user.accountId, 'REMOVE');
   }
 
+  @Post(':id/retry-unconfirmed')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: 'OPERATION_RETRY_UNCONFIRMED', resourceType: 'Operation' })
+  @ApiOperation({ summary: 'Retry unconfirmed Serasa creation items individually' })
+  async retryUnconfirmed(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.operationsService.retryUnconfirmedCreateOperation(id, user.id, user.accountId);
+  }
+
   @Post('contracts/:contractId/cancel')
   @Roles('ADMIN', 'OPERATIONAL', 'VIEWER')
   @CreditorPortalAccess()

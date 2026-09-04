@@ -293,6 +293,72 @@ export class OperationsService {
   }
 
   /**
+   * Replays only the contracts from a prior creation operation that were
+   * accepted by Serasa but never confirmed by webhook. It intentionally does
+   * not use the normal eligibility list: those contracts remain SENT while
+   * confirmation is pending. Each replay is queued as its own request.
+   */
+  async retryUnconfirmedCreateOperation(
+    sourceOperationId: string,
+    userId: string,
+    accountId: string,
+  ) {
+    const source = await this.prisma.providerOperation.findFirst({
+      where: { id: sourceOperationId, accountId, action: OperationAction.CREATE_OR_UPDATE },
+      select: {
+        providerId: true,
+        walletId: true,
+        items: {
+          where: {
+            status: OperationItemStatus.WAITING_PROVIDER_EVENT,
+            contract: { status: ContractStatus.ACTIVE, paymentStatus: { not: PaymentStatus.PAID }, serasaStatus: SerasaStatus.SENT },
+          },
+          select: { contractId: true },
+        },
+      },
+    });
+
+    if (!source) throw new NotFoundException('Operação de inclusão não encontrada');
+    if (source.items.length === 0) {
+      throw new UnprocessableEntityException('Não há contratos sem confirmação para reenviar');
+    }
+
+    const operation = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.providerOperation.create({
+        data: {
+          accountId,
+          providerId: source.providerId,
+          walletId: source.walletId,
+          userId,
+          action: OperationAction.CREATE_OR_UPDATE,
+          status: OperationStatus.PENDING,
+          totalItems: source.items.length,
+        },
+      });
+      await tx.providerOperationItem.createMany({
+        data: source.items.map((item, batchIndex) => ({
+          operationId: created.id,
+          contractId: item.contractId,
+          batchIndex,
+          status: OperationItemStatus.PENDING,
+        })),
+      });
+      return created;
+    });
+
+    for (let batchIndex = 0; batchIndex < source.items.length; batchIndex++) {
+      await this.operationQueue.add(
+        `operation-retry-${operation.id}-${batchIndex}`,
+        { operationId: operation.id, batchIndex, providerId: source.providerId, action: OperationAction.CREATE_OR_UPDATE },
+        { attempts: 1 },
+      );
+    }
+
+    this.logger.log(`Operation ${operation.id} replays ${source.items.length} unconfirmed Serasa contracts individually`);
+    return { id: operation.id, status: operation.status, totalItems: source.items.length };
+  }
+
+  /**
    * Cancels a contract at the creditor's request. A cancellation makes the
    * contract unavailable in CobCom channels immediately and, when it has an
    * active Serasa debt, queues the provider removal before changing the local
