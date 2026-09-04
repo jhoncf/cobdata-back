@@ -18,7 +18,10 @@ import {
   PaymentStatus,
 } from '@prisma/client';
 
-const BATCH_SIZE = 1000;
+// Limpa Nome Parceiros accepts at most 100 debts in each request. Keep the
+// operation batches aligned with that provider limit so a large wallet does
+// not fail as a single all-or-nothing request.
+const BATCH_SIZE = 100;
 
 /** SerasaStatus values eligible for CREATE_OR_UPDATE operations */
 const ELIGIBLE_FOR_CREATE: SerasaStatus[] = [
