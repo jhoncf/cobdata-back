@@ -130,7 +130,11 @@ export class OperationProcessor extends WorkerHost {
         document: item.contract.debtorDocument,
         contractNumber: item.contract.contractNumber,
         wallet: 'PRE_CALCULADA',
-        debtType: item.contract.debtType,
+        // In the Limpa Nome detail screen this field is displayed as
+        // "Produto / Serviço". The CRM keeps the normalized debt type for
+        // operational filtering, while the consumer sees the creditor's
+        // legal name so the origin of the charge is clear.
+        debtType: item.contract.wallet.creditor.name || item.contract.debtType,
         occurrenceDate: item.contract.occurrenceDate.toISOString().slice(0, 10),
         // The debt keeps its current value; Serasa receives the calculated offer separately.
         debtValue: Number(item.contract.updatedValue),
