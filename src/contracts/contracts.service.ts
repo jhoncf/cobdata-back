@@ -481,6 +481,7 @@ export class ContractsService {
     userRole: string,
     userScopes?: string[],
     portalCreditorId?: string | null,
+    includeTotal = true,
   ): Promise<PaginatedResponse<any>> {
     const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, debtorDocument, search, tags, sortBy, sortDirection } = query;
 
@@ -638,7 +639,7 @@ export class ContractsService {
           : { createdAt: 'desc' },
         include: { tags: { select: { tag: true } } },
       }),
-      this.prisma.contract.count({ where }),
+      includeTotal ? this.prisma.contract.count({ where }) : Promise.resolve(0),
     ]);
 
     // Mask document for VIEWER and flatten tags
@@ -660,6 +661,51 @@ export class ContractsService {
       data,
       meta: { total, page, limit, totalPages },
     };
+  }
+
+  /**
+   * Exports every contract that matches the same filters accepted by the
+   * paginated list. The query is intentionally read in chunks to keep large
+   * wallet exports from loading the entire result set in a single DB request.
+   */
+  async export(
+    query: ListContractsQueryDto,
+    accountId: string,
+    userRole: string,
+    userScopes?: string[],
+    portalCreditorId?: string | null,
+  ): Promise<any[]> {
+    const chunkSize = 1000;
+    const firstPage = await this.list(
+      { ...query, page: 1, limit: chunkSize },
+      accountId,
+      userRole,
+      userScopes,
+      portalCreditorId,
+      true,
+    );
+
+    if (firstPage.meta.totalPages <= 1) return firstPage.data;
+
+    const rows = [...firstPage.data];
+    const pages = Array.from({ length: firstPage.meta.totalPages - 1 }, (_, index) => index + 2);
+    const parallelism = 5;
+
+    for (let index = 0; index < pages.length; index += parallelism) {
+      const pageResults = await Promise.all(
+        pages.slice(index, index + parallelism).map((page) => this.list(
+          { ...query, page, limit: chunkSize },
+          accountId,
+          userRole,
+          userScopes,
+          portalCreditorId,
+          false,
+        )),
+      );
+      pageResults.forEach((result) => rows.push(...result.data));
+    }
+
+    return rows;
   }
 
   /**

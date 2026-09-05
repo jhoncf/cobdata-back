@@ -64,6 +64,67 @@ export class ContractsController {
     return this.contractsService.list(query, user.accountId, user.role, userScopes, user.creditorId);
   }
 
+  @Get('export')
+  @CreditorPortalAccess()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export filtered contracts as CSV' })
+  @ApiResponse({ status: 200, description: 'CSV file containing every contract that matches the filters' })
+  async export(
+    @Query() query: ListContractsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: any,
+    @Res() res: Response,
+  ): Promise<void> {
+    const contracts = await this.contractsService.export(
+      query,
+      user.accountId,
+      user.role,
+      req.userScopes,
+      user.creditorId,
+    );
+    const escapeCsv = (value: unknown) => {
+      const text = value == null ? '' : String(value);
+      return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const formatMoney = (value: unknown) => value == null
+      ? ''
+      : Number(value).toFixed(2).replace('.', ',');
+    const formatDate = (value: Date | string | null) => {
+      if (!value) return '';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime())
+        ? ''
+        : date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    };
+    const rows = contracts.map((contract) => [
+      contract.contractNumber,
+      contract.debtorDocument,
+      contract.debtorName,
+      contract.debtorPhone,
+      contract.debtorEmail,
+      formatMoney(contract.originalValue),
+      formatMoney(contract.updatedValue),
+      formatMoney(contract.offerValue),
+      contract.offerDiscountPercent,
+      contract.status,
+      contract.paymentStatus,
+      contract.serasaStatus,
+      formatDate(contract.occurrenceDate),
+      formatDate(contract.dueDate),
+      contract.agingDays,
+      contract.debtId,
+      contract.agreementReference,
+    ].map(escapeCsv).join(';'));
+    const csv = [
+      'Nº Contrato;Documento;Nome do devedor;Telefone;E-mail;Valor original;Valor atualizado;Valor da oferta;Desconto da oferta (%);Situação;Status financeiro;Status Serasa;Data de ocorrência;Data de vencimento;Aging (dias);Debt ID Serasa;Agreement ID Serasa',
+      ...rows,
+    ].join('\r\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="contratos.csv"');
+    res.send(`\uFEFF${csv}`);
+  }
+
   @Post('bulk-transfer')
   @Roles('ADMIN', 'OPERATIONAL')
   @HttpCode(HttpStatus.OK)
