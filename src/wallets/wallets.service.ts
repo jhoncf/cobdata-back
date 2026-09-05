@@ -18,6 +18,7 @@ export interface WalletSummary {
   totalContracts: number;
   contractsByPaymentStatus: Record<string, number>;
   paymentStatusTotals: Record<string, { count: number; amount: number }>;
+  serasaStatusTotals: Record<string, number>;
   serasaTotal: { count: number; amount: number };
   totalValue: number;
   recoveredValue: number;
@@ -428,7 +429,7 @@ export class WalletsService implements OnModuleDestroy {
   }
 
   async getWalletSummary(walletId: string): Promise<WalletSummary> {
-    const [statusTotals, overall] = await Promise.all([
+    const [statusTotals, serasaStatusTotals, overall] = await Promise.all([
       this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
         SELECT "paymentStatus" AS status,
                COUNT(*)::bigint AS count,
@@ -436,6 +437,13 @@ export class WalletsService implements OnModuleDestroy {
         FROM "Contract"
         WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL AND "status" = 'ACTIVE'
         GROUP BY "paymentStatus"
+      `),
+      this.prisma.$queryRaw<Array<{ status: string; count: bigint }>>(Prisma.sql`
+        SELECT "serasaStatus" AS status,
+               COUNT(*)::bigint AS count
+        FROM "Contract"
+        WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL
+        GROUP BY "serasaStatus"
       `),
       this.prisma.$queryRaw<Array<{
         totalContracts: bigint;
@@ -482,10 +490,14 @@ export class WalletsService implements OnModuleDestroy {
 
     const contractsByPaymentStatus: Record<string, number> = {};
     const paymentStatusTotals: Record<string, { count: number; amount: number }> = {};
+    const serasaStatusCounts: Record<string, number> = {};
     for (const group of statusTotals) {
       const count = Number(group.count);
       contractsByPaymentStatus[group.status] = count;
       paymentStatusTotals[group.status] = { count, amount: Number(group.amount) };
+    }
+    for (const group of serasaStatusTotals) {
+      serasaStatusCounts[group.status] = Number(group.count);
     }
 
     const result = overall[0] ?? {
@@ -502,6 +514,7 @@ export class WalletsService implements OnModuleDestroy {
       totalContracts,
       contractsByPaymentStatus,
       paymentStatusTotals,
+      serasaStatusTotals: serasaStatusCounts,
       serasaTotal: { count: Number(result.serasaCount), amount: Number(result.serasaValue) },
       totalValue,
       recoveredValue,
