@@ -72,7 +72,7 @@ export class OperationProcessor extends WorkerHost {
               offerMaxInstallments: true,
               debtOrigin: true,
               debtId: true,
-              wallet: { select: { creditor: { select: { name: true, cnpj: true } } } },
+              wallet: { select: { creditor: { select: { name: true, tradeName: true, cnpj: true } } } },
             },
           },
         },
@@ -131,10 +131,9 @@ export class OperationProcessor extends WorkerHost {
         contractNumber: item.contract.contractNumber,
         wallet: 'PRE_CALCULADA',
         // In the Limpa Nome detail screen this field is displayed as
-        // "Produto / Serviço". The CRM keeps the normalized debt type for
-        // operational filtering, while the consumer sees the creditor's
-        // legal name so the origin of the charge is clear.
-        debtType: item.contract.wallet.creditor.name || item.contract.debtType,
+        // "Produto / Serviço". Keep the normalized type in the CRM, while
+        // sending an explicit consumer-facing origin to Serasa.
+        debtType: `ORIGEM: ${item.contract.wallet.creditor.tradeName || item.contract.wallet.creditor.name || item.contract.debtType}`,
         occurrenceDate: item.contract.occurrenceDate.toISOString().slice(0, 10),
         // The debt keeps its current value; Serasa receives the calculated offer separately.
         debtValue: Number(item.contract.updatedValue),

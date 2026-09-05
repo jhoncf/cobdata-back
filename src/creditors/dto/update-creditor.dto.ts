@@ -21,6 +21,13 @@ export class UpdateCreditorDto {
   @MaxLength(255)
   name?: string;
 
+  @ApiPropertyOptional({ description: 'Creditor trade name used in the Serasa product/service description', example: 'Desktop Internet', maxLength: 255 })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  tradeName?: string | null;
+
   @ApiPropertyOptional({ description: 'CNPJ (14 numeric digits with valid check digit)', example: '11222333000181' })
   @IsOptional()
   @IsCnpj()

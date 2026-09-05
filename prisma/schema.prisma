@@ -269,6 +269,7 @@ model Creditor {
   id                      String    @id @default(uuid())
   accountId               String
   name                    String
+  tradeName               String?
   cnpj                    String?   @unique
   contacts                Json?
   address                 Json?

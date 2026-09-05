@@ -28,6 +28,7 @@ export class CreditorsService {
       const creditor = await tx.creditor.create({ data: {
         accountId,
         name: dto.name,
+        tradeName: dto.tradeName ?? null,
         cnpj: dto.cnpj ?? null,
         contacts: dto.contacts ? (dto.contacts as any) : null,
         address: dto.address ? (dto.address as any) : null,
@@ -113,6 +114,7 @@ export class CreditorsService {
 
     const data: any = {};
     if (dto.name !== undefined) data.name = dto.name;
+    if (dto.tradeName !== undefined) data.tradeName = dto.tradeName || null;
     if (dto.cnpj !== undefined) data.cnpj = dto.cnpj;
     if (dto.contacts !== undefined) data.contacts = dto.contacts as any;
     if (dto.address !== undefined) data.address = dto.address as any;
