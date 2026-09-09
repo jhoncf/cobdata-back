@@ -109,27 +109,45 @@ export class ContractsService {
     // 3. Resolve creditorId from wallet
     const creditorId = wallet.creditorId;
 
+    // CPF/CNPJ + número do contrato + vencimento são a identidade do contrato
+    // dentro do credor. Origem e demais campos são dados atualizáveis, nunca
+    // criam uma nova cobrança.
+    const debtorDocumentHash = this.deduplicationService.sha256(dto.debtorDocument);
+    const dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+    const identityMatches = await this.prisma.contract.findMany({
+      where: {
+        accountId,
+        debtorDocumentHash,
+        contractNumber: dto.contractNumber,
+        dueDate,
+        deletedAt: null,
+        wallet: { creditorId },
+      },
+      take: 2,
+    });
+    if (identityMatches.length > 1) {
+      throw new ConflictException(
+        'More than one contract exists with the same creditor, document, contract number and due date. Resolve the duplicate before updating it.',
+      );
+    }
+
     // 5. Compute deduplication key
     const deduplicationKey = this.deduplicationService.computeDeduplicationKey({
       creditorId,
       debtorDocument: dto.debtorDocument,
       contractNumber: dto.contractNumber,
-      debtOriginDocument: dto.debtOrigin,
+      dueDate,
     });
 
-    // 6. Check for existing contract with same dedup key
-    const existingContract = await this.prisma.contract.findUnique({
-      where: { deduplicationKey },
-    });
+    // 6. Existing records are found by their business identity, including
+    // legacy records created before the current key format.
+    const existingContract = identityMatches[0] ?? null;
 
     // 7. Compute document hash for search
-    const debtorDocumentHash = this.deduplicationService.sha256(dto.debtorDocument);
     const debtOriginDocHash = dto.debtOrigin
       ? this.deduplicationService.sha256(dto.debtOrigin)
       : null;
 
-    // Parse dueDate
-    const dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
     const cancelledAt = dto.cancelledAt ? new Date(dto.cancelledAt) : null;
     const agingDays = this.calculateAgingDays(occurrenceDate);
     const ceilingBand = wallet.creditor.discountBands.find((band) =>

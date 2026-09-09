@@ -6,7 +6,7 @@ export class DeduplicationService {
   /**
    * Compute the deduplication key for a contract.
    * The key is a SHA-256 hash of the concatenation:
-   *   creditorId | sha256(debtorDocument) | contractNumber | sha256(debtOriginDocument) or ''
+   *   creditorId | sha256(debtorDocument) | contractNumber | dueDate
    *
    * IMPORTANT: creditorId is resolved from wallet.creditorId by the caller.
    * The API receives walletId, the service resolves creditorId via lookup.
@@ -15,13 +15,13 @@ export class DeduplicationService {
     creditorId: string;
     debtorDocument: string;
     contractNumber: string;
-    debtOriginDocument?: string;
+    dueDate?: Date | string | null;
   }): string {
     const input = [
       data.creditorId,
       this.sha256(data.debtorDocument),
       data.contractNumber,
-      data.debtOriginDocument ? this.sha256(data.debtOriginDocument) : '',
+      data.dueDate ? new Date(data.dueDate).toISOString().slice(0, 10) : '',
     ].join('|');
 
     return this.sha256(input);

@@ -224,7 +224,7 @@ export class ApplicationProcessor extends WorkerHost {
               creditorId,
               debtorDocument: debtorDoc,
               contractNumber,
-              debtOriginDocument: debtOrigin || undefined,
+              dueDate,
             });
           const debtorDocumentHash =
             this.deduplicationService.sha256(debtorDoc);
@@ -235,16 +235,18 @@ export class ApplicationProcessor extends WorkerHost {
           // CPF/CNPJ + contract number + due date identify the same contract.
           // The selected wallet is intentionally not part of this identity: a
           // newer import is allowed to move the contract to another wallet.
-          const existingContract = dueDate
-            ? await tx.contract.findFirst({
+          const existingContracts = dueDate
+            ? await tx.contract.findMany({
             where: {
               accountId,
+              wallet: { creditorId },
               debtorDocumentHash,
               contractNumber,
               dueDate,
               deletedAt: null,
             },
             orderBy: { updatedAt: 'desc' },
+            take: 2,
             select: {
               id: true,
               walletId: true,
@@ -271,8 +273,9 @@ export class ApplicationProcessor extends WorkerHost {
               deletedAt: true,
             },
           })
-            : await tx.contract.findUnique({
+            : await tx.contract.findMany({
               where: { deduplicationKey },
+              take: 2,
               select: {
                 id: true, walletId: true, debtType: true, occurrenceDate: true,
                 originalValue: true, updatedValue: true, debtOrigin: true,
@@ -283,6 +286,12 @@ export class ApplicationProcessor extends WorkerHost {
                 cancelledAt: true, status: true, paymentStatus: true, deletedAt: true,
               },
             });
+          if (existingContracts.length > 1) {
+            ignoredCount++;
+            this.logger.warn(`Skipped duplicate contract identity in import ${batchId}: ${contractNumber}`);
+            continue;
+          }
+          const existingContract = existingContracts[0] ?? null;
 
           if (!existingContract || existingContract.deletedAt) {
             // CREATE: no existing match
