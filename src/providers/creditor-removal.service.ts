@@ -21,6 +21,10 @@ export class CreditorRemovalService {
   }
 
   private date(value: unknown): string | null {
+    if (typeof value === 'number') {
+      const parsed = XLSX.SSF.parse_date_code(value);
+      if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+    }
     if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
     const text = String(value ?? '').trim();
     const br = text.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
@@ -44,7 +48,9 @@ export class CreditorRemovalService {
     if (file.size > 100 * 1024 * 1024) throw new UnprocessableEntityException('O arquivo excede o limite de 100 MB.');
     let sheet: unknown[][];
     try {
-      const workbook = XLSX.read(file.buffer, { type: 'buffer', cellDates: true, raw: false });
+      // `raw: true` is essential for Brazilian CSV values such as "980,00".
+      // With formatted parsing, SheetJS coerces that value to 98000.
+      const workbook = XLSX.read(file.buffer, { type: 'buffer', cellDates: true, raw: true });
       const sheetName = workbook.SheetNames[0];
       if (!sheetName) throw new Error();
       const firstSheet = workbook.Sheets[sheetName];
