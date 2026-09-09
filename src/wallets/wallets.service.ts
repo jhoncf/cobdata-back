@@ -89,6 +89,7 @@ export class WalletsService implements OnModuleDestroy {
         })) },
       },
     });
+    await this.invalidateListCache(accountId);
     return wallet;
   }
 
@@ -179,6 +180,25 @@ export class WalletsService implements OnModuleDestroy {
     }
   }
 
+  private async invalidateListCache(accountId: string): Promise<void> {
+    try {
+      let cursor = '0';
+      do {
+        const [nextCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          `wallets:list:*${accountId}*`,
+          'COUNT',
+          100,
+        );
+        if (keys.length > 0) await this.redis.del(...keys);
+        cursor = nextCursor;
+      } while (cursor !== '0');
+    } catch {
+      // Cache é opcional; a mutação no banco continua sendo a fonte de verdade.
+    }
+  }
+
   async findById(
     id: string,
     accountId: string,
@@ -261,6 +281,7 @@ export class WalletsService implements OnModuleDestroy {
       where: { id },
       data,
     });
+    await this.invalidateListCache(accountId);
     return updated;
   }
 
@@ -398,6 +419,7 @@ export class WalletsService implements OnModuleDestroy {
       where: { id },
       data: { deletedAt: new Date() },
     });
+    await this.invalidateListCache(accountId);
   }
 
   private validateWalletStrategyBands(
