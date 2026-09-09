@@ -4,8 +4,8 @@ import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { OperationsService } from './operations.service';
 
-type RemovalRow = { line: number; contractNumber: string; debtorDocument: string; value: number; occurrenceDate: string };
-type Mapping = Record<'contractNumber' | 'debtorDocument' | 'value' | 'occurrenceDate', string>;
+type RemovalRow = { line: number; contractNumber: string; debtorDocument: string };
+type Mapping = Record<'contractNumber' | 'debtorDocument', string>;
 
 @Injectable()
 export class CreditorRemovalService {
@@ -14,10 +14,10 @@ export class CreditorRemovalService {
   private parseMapping(raw?: string): Mapping {
     try {
       const mapping = JSON.parse(raw ?? '{}');
-      const fields = ['contractNumber', 'debtorDocument', 'value', 'occurrenceDate'] as const;
+      const fields = ['contractNumber', 'debtorDocument'] as const;
       if (fields.some((field) => typeof mapping[field] !== 'string' || !mapping[field].trim())) throw new Error();
       return mapping;
-    } catch { throw new UnprocessableEntityException('Mapeie número do contrato, CPF, valor da dívida e data da dívida.'); }
+    } catch { throw new UnprocessableEntityException('Mapeie número do contrato e CPF/CNPJ.'); }
   }
 
   private date(value: unknown): string | null {
@@ -59,16 +59,14 @@ export class CreditorRemovalService {
     } catch { throw new UnprocessableEntityException('Não foi possível ler o arquivo.'); }
     const [headers = [], ...data] = sheet;
     const index = (field: keyof Mapping) => headers.findIndex((header) => String(header).trim() === mapping[field].trim());
-    const indexes = { contractNumber: index('contractNumber'), debtorDocument: index('debtorDocument'), value: index('value'), occurrenceDate: index('occurrenceDate') };
+    const indexes = { contractNumber: index('contractNumber'), debtorDocument: index('debtorDocument') };
     if (Object.values(indexes).some((value) => value < 0)) throw new UnprocessableEntityException('O mapeamento não corresponde ao cabeçalho do arquivo.');
     let invalidLines = 0;
     const rows = data.flatMap((row, offset) => {
       const contractNumber = String(row[indexes.contractNumber] ?? '').trim();
       const debtorDocument = String(row[indexes.debtorDocument] ?? '').replace(/\D/g, '');
-      const value = this.amount(row[indexes.value]);
-      const occurrenceDate = this.date(row[indexes.occurrenceDate]);
-      if (!contractNumber || ![11, 14].includes(debtorDocument.length) || value === null || !occurrenceDate) { invalidLines++; return []; }
-      return [{ line: offset + 2, contractNumber, debtorDocument, value, occurrenceDate }];
+      if (!contractNumber || ![11, 14].includes(debtorDocument.length)) { invalidLines++; return []; }
+      return [{ line: offset + 2, contractNumber, debtorDocument }];
     });
     return { rows, invalidLines };
   }
@@ -87,8 +85,7 @@ export class CreditorRemovalService {
     let unmatched = 0; let blocked = 0; let duplicateLines = 0;
     for (const row of rows) {
       const contract = contractByKey.get(`${row.contractNumber}|${row.debtorDocument}`);
-      const equal = contract && Number(contract.updatedValue) === row.value && contract.occurrenceDate.toISOString().slice(0, 10) === row.occurrenceDate;
-      if (!equal) { unmatched++; continue; }
+      if (!contract) { unmatched++; continue; }
       if (contract.status === ContractStatus.CANCELLED || contract.paymentStatus === PaymentStatus.PAID) { blocked++; continue; }
       if (matched.has(contract.id)) { duplicateLines++; continue; }
       matched.set(contract.id, contract as Contract);
@@ -100,7 +97,7 @@ export class CreditorRemovalService {
     if (!creditorId) throw new UnprocessableEntityException('Este recurso está disponível somente para usuários de credor.');
     const { rows, invalidLines } = this.rows(file, this.parseMapping(mappingRaw));
     const result = await this.resolve(rows, accountId, creditorId);
-    return { totalLines: rows.length + invalidLines, validLines: rows.length, invalidLines, matchedCount: result.matched.length, unmatchedCount: result.unmatched, blockedCount: result.blocked, duplicateLines: result.duplicateLines, samples: result.matched.slice(0, 5).map((contract) => ({ contractNumber: contract.contractNumber, debtorDocument: contract.debtorDocument, updatedValue: contract.updatedValue, occurrenceDate: contract.occurrenceDate })) };
+    return { totalLines: rows.length + invalidLines, validLines: rows.length, invalidLines, matchedCount: result.matched.length, unmatchedCount: result.unmatched, blockedCount: result.blocked, duplicateLines: result.duplicateLines, samples: result.matched.slice(0, 5).map((contract) => ({ contractNumber: contract.contractNumber, debtorDocument: contract.debtorDocument })) };
   }
 
   async confirm(file: Express.Multer.File, mappingRaw: string | undefined, accountId: string, userId: string, creditorId?: string | null) {
