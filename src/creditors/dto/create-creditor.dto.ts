@@ -7,7 +7,7 @@ import {
   ArrayMaxSize,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsCnpj } from '../../common/validators/is-cnpj.validator';
 import { ContactDto } from './contact.dto';
@@ -28,6 +28,11 @@ export class CreateCreditorDto {
   tradeName?: string;
 
   @ApiPropertyOptional({ description: 'CNPJ (14 numeric digits with valid check digit)', example: '11222333000181' })
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const digits = value.replace(/\D/g, '');
+    return digits || undefined;
+  })
   @IsOptional()
   @IsCnpj()
   cnpj?: string;
