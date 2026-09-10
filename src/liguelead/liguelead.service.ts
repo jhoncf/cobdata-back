@@ -211,7 +211,10 @@ export class LigueLeadService {
     // wording while keeping the link intact for delivery.
     return `${message.trim()} Acesse para consultar e regularizar: ${url.toString()}`
       .trim()
-      .replace(/\bpix\b/gi, 'pagamento');
+      .replace(/\bpix\b/gi, 'pagamento')
+      // A LigueLead rejeita "acordo" em mensagens SMS. Preservamos o
+      // sentido comercial sem fazer o disparo falhar por essa restrição.
+      .replace(/\bacordo(s)?\b/gi, 'regularização');
   }
 
   private spellDigits(value: string) {
