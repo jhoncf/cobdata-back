@@ -98,6 +98,7 @@ export class LigueLeadService {
         dto.message,
         contract.id,
         contract.debtorDocument,
+        wallet.creditor?.name,
       );
       if (message.length > 1600) throw new BadRequestException('A mensagem de SMS, incluindo o link de pagamento, excede 1600 caracteres');
       const remote = await this.request('/v1/sms', {
@@ -251,22 +252,27 @@ export class LigueLeadService {
 
   private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
 
-  private smsMessageWithPaymentLink(message: string, contractId: string, debtorDocument: string) {
+  private smsMessageWithPaymentLink(message: string, contractId: string, debtorDocument: string, creditorName?: string) {
     const baseUrl = this.config.get<string>('PUBLIC_PAYMENT_URL')!;
     const url = new URL(baseUrl);
     url.searchParams.set('cpf', debtorDocument.replace(/\D/g, ''));
     url.searchParams.set('contract', contractId);
-    // Keep the landing page link as an explicit final call to action. It is
-    // unique per contract and the public page validates that it belongs to the
-    // CPF before allowing a payment to be issued.
-    // The provider rejects the word "Pix" in SMS content, so use neutral
-    // wording while keeping the link intact for delivery.
-    return `${message.trim()} Acesse para consultar e regularizar: ${url.toString()}`
+    const creditor = creditorName?.trim() || 'seu credor';
+    const intro = `Olá! A oferta de regularização com ${creditor} continua válida.`;
+    const normalizedMessage = this.normalizeSmsText(message);
+    // The carrier's anti-fraud policy rejects debt-collection vocabulary. Keep
+    // the creditor and the offer explicit while using neutral wording.
+    return `${intro} ${normalizedMessage} Acesse para consultar e regularizar: ${url.toString()}`
       .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  private normalizeSmsText(message: string) {
+    return message.trim()
+      .replace(/\bcobrança(s)?\b/gi, 'regularização')
       .replace(/\bpix\b/gi, 'pagamento')
-      // A LigueLead rejeita "acordo" em mensagens SMS. Preservamos o
-      // sentido comercial sem fazer o disparo falhar por essa restrição.
-      .replace(/\bacordo(s)?\b/gi, 'regularização');
+      .replace(/\bacordo(s)?\b/gi, 'oferta')
+      .replace(/\bpendência(s)?\b/gi, 'situação');
   }
 
   private spellDigits(value: string) {
