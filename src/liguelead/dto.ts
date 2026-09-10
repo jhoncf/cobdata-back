@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 
 export class UpsertLigueLeadAgentDto {
   @IsString() @Length(1, 100) name!: string;
@@ -17,6 +17,13 @@ class DispatchBaseDto {
 
 export class SendLigueLeadSmsDto extends DispatchBaseDto {
   @IsOptional() @IsString() @Length(1, 1600) message?: string;
+}
+
+/** Same contract filters used by the wallet table. The wallet is always fixed by the route. */
+export class SendFilteredLigueLeadSmsDto {
+  @IsString() @Length(1, 200) title!: string;
+  @IsOptional() @IsString() @Length(1, 1600) message?: string;
+  @IsOptional() @IsObject() filters?: Record<string, unknown>;
 }
 
 export class SendLigueLeadCallsDto extends DispatchBaseDto {

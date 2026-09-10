@@ -45,6 +45,7 @@ import { QUEUES } from './common/constants/queues';
       { name: QUEUES.IMPORT_VALIDATION },
       { name: QUEUES.IMPORT_APPLICATION },
       { name: QUEUES.PROVIDER_OPERATION },
+      { name: QUEUES.LIGUELEAD_SMS },
     ),
     PrismaModule,
     StorageModule,

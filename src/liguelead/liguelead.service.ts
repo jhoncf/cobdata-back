@@ -1,14 +1,26 @@
 import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'crypto';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { SendLigueLeadCallsDto, SendLigueLeadSmsDto, UpsertLigueLeadAgentDto } from './dto';
+import { ContractsService } from '../contracts/contracts.service';
+import { ListContractsQueryDto } from '../contracts/dto/list-contracts-query.dto';
+import { QUEUES } from '../common/constants/queues';
+import { SendFilteredLigueLeadSmsDto, SendLigueLeadCallsDto, SendLigueLeadSmsDto, UpsertLigueLeadAgentDto } from './dto';
+
+export type FilteredSmsJobData = { walletId: string; accountId: string; userId: string; dto: SendFilteredLigueLeadSmsDto; scopes?: string[] };
 
 @Injectable()
 export class LigueLeadService {
   private readonly logger = new Logger(LigueLeadService.name);
 
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly contractsService: ContractsService,
+    @InjectQueue(QUEUES.LIGUELEAD_SMS) private readonly smsQueue: Queue<FilteredSmsJobData>,
+  ) {}
 
   private credentials() {
     const apiToken = this.config.get<string>('LIGUELEAD_API_TOKEN');
@@ -97,6 +109,45 @@ export class LigueLeadService {
     return this.createDispatchWithInteractions({
       accountId, walletId, userId, type: 'SMS', title: dto.title, channel: 'SMS', contracts: dispatchedContracts,
     });
+  }
+
+  async enqueueFilteredSms(walletId: string, accountId: string, userId: string, dto: SendFilteredLigueLeadSmsDto, scopes?: string[]) {
+    await this.wallet(walletId, accountId, scopes);
+    const job = await this.smsQueue.add('dispatch-filtered-sms', { walletId, accountId, userId, dto, scopes }, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+    return { queued: true, jobId: job.id };
+  }
+
+  /** Processes every matching contract in small pages so the HTTP request is never the batch worker. */
+  async sendFilteredSms({ walletId, accountId, userId, dto, scopes }: FilteredSmsJobData) {
+    const filters = dto.filters ?? {};
+    let page = 1;
+    let processed = 0;
+    let skipped = 0;
+    while (true) {
+      const result = await this.contractsService.list({
+        ...(filters as Partial<ListContractsQueryDto>),
+        walletId,
+        page,
+        limit: 100,
+      } as ListContractsQueryDto, accountId, 'ADMIN', scopes, null, false);
+      if (!result.data.length) break;
+      const eligibleIds = result.data
+        .filter((contract: any) => contract.status === 'ACTIVE' && contract.paymentStatus !== 'PAID' && Boolean(contract.debtorPhone?.trim()))
+        .map((contract: any) => contract.id);
+      skipped += result.data.length - eligibleIds.length;
+      if (eligibleIds.length) {
+        await this.sendSms(walletId, accountId, userId, { title: dto.title, message: dto.message, contractIds: eligibleIds }, scopes);
+        processed += eligibleIds.length;
+      }
+      if (result.data.length < 100) break;
+      page += 1;
+    }
+    return { processed, skipped };
   }
 
   async sendCalls(walletId: string, accountId: string, userId: string, dto: SendLigueLeadCallsDto, scopes?: string[]) {
