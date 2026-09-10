@@ -16,7 +16,7 @@ class DispatchBaseDto {
 }
 
 export class SendLigueLeadSmsDto extends DispatchBaseDto {
-  @IsString() @Length(1, 1600) message!: string;
+  @IsOptional() @IsString() @Length(1, 1600) message?: string;
 }
 
 export class SendLigueLeadCallsDto extends DispatchBaseDto {

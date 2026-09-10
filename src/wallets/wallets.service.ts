@@ -78,6 +78,7 @@ export class WalletsService implements OnModuleDestroy {
         offerFirstInstallmentDays: dto.offerFirstInstallmentDays ?? 5,
         offerMinInstallmentValue: dto.offerMinInstallmentValue ?? 0.01,
         offerMaxInstallments: dto.offerMaxInstallments ?? 1,
+        smsTemplate: dto.smsTemplate || null,
         commissionPercent: creditor.commissionPercent,
         discountBands: { create: creditor.discountBands.map((band) => ({
           minAgingDays: band.minAgingDays,
@@ -253,6 +254,7 @@ export class WalletsService implements OnModuleDestroy {
     if (dto.offerFirstInstallmentDays !== undefined) data.offerFirstInstallmentDays = dto.offerFirstInstallmentDays;
     if (dto.offerMinInstallmentValue !== undefined) data.offerMinInstallmentValue = dto.offerMinInstallmentValue;
     if (dto.offerMaxInstallments !== undefined) data.offerMaxInstallments = dto.offerMaxInstallments;
+    if (dto.smsTemplate !== undefined) data.smsTemplate = dto.smsTemplate || null;
 
     if (dto.discountBands !== undefined) {
       this.validateWalletStrategyBands(dto.discountBands, wallet.creditor.discountBands);

@@ -63,12 +63,16 @@ export class LigueLeadService {
   }
 
   async sendSms(walletId: string, accountId: string, userId: string, dto: SendLigueLeadSmsDto, scopes?: string[]) {
-    await this.wallet(walletId, accountId, scopes);
+    const wallet = await this.wallet(walletId, accountId, scopes);
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
     // Each contract receives a unique link. Sending separately prevents one
     // debtor from receiving another debtor's payment link in a batch campaign.
     const dispatchedContracts = await Promise.all(contracts.map(async (contract) => {
-      const message = this.smsMessageWithPaymentLink(dto.message, contract.id, contract.debtorDocument);
+      const message = this.smsMessageWithPaymentLink(
+        dto.message || wallet.smsTemplate || 'Olá! Identificamos uma pendência. Consulte e regularize sua situação.',
+        contract.id,
+        contract.debtorDocument,
+      );
       if (message.length > 1600) throw new BadRequestException('A mensagem de SMS, incluindo o link de pagamento, excede 1600 caracteres');
       const remote = await this.request('/v1/sms', {
         method: 'POST',

@@ -362,6 +362,7 @@ model Wallet {
   /// Legacy snapshot retained for historical compatibility. New offers always
   /// read the fixed commission directly from the creditor's commercial policy.
   commissionPercent         Decimal      @default(0) @db.Decimal(5, 2)
+  smsTemplate               String?      @db.Text
   name                      String
   status                    WalletStatus @default(ACTIVE)
   deletedAt                 DateTime?

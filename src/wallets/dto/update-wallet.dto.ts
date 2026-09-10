@@ -28,6 +28,10 @@ export class UpdateWalletDto {
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(1) @Max(999)
   offerMaxInstallments?: number;
 
+  @IsOptional() @IsString() @MaxLength(1400)
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  smsTemplate?: string;
+
   @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => WalletDiscountBandDto)
   discountBands?: WalletDiscountBandDto[];
 }

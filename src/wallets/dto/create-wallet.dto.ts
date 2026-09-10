@@ -21,4 +21,8 @@ export class CreateWalletDto {
 
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(1) @Max(999)
   offerMaxInstallments?: number;
+
+  @IsOptional() @IsString() @MaxLength(1400)
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  smsTemplate?: string;
 }
