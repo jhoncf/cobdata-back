@@ -28,6 +28,7 @@ export interface WalletSummary {
   commissionRealizedValue: number;
   discountsConcededValue: number;
   efficiencyRate: number;
+  agreementDailyHistory: Array<{ date: string; count: number; amount: number }>;
 }
 
 @Injectable()
@@ -453,7 +454,7 @@ export class WalletsService implements OnModuleDestroy {
   }
 
   async getWalletSummary(walletId: string): Promise<WalletSummary> {
-    const [statusTotals, serasaStatusTotals, overall] = await Promise.all([
+    const [statusTotals, serasaStatusTotals, overall, agreementDailyTotals] = await Promise.all([
       this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
         SELECT "paymentStatus" AS status,
                COUNT(*)::bigint AS count,
@@ -510,6 +511,18 @@ export class WalletsService implements OnModuleDestroy {
         FROM "Contract"
         WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL AND "status" = 'ACTIVE'
       `),
+      this.prisma.$queryRaw<Array<{ date: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
+        SELECT TO_CHAR(("agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS date,
+               COUNT(*)::bigint AS count,
+               COALESCE(SUM("agreementTotalAmount"), 0) AS amount
+        FROM "Contract"
+        WHERE "walletId" = ${walletId}
+          AND "deletedAt" IS NULL
+          AND "agreementCreatedAt" >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+          AND "agreementCreatedAt" < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+        GROUP BY ("agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date
+        ORDER BY ("agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date
+      `),
     ]);
 
     const contractsByPaymentStatus: Record<string, number> = {};
@@ -533,6 +546,20 @@ export class WalletsService implements OnModuleDestroy {
     const totalValue = Number(result.totalValue);
     const recoveredValue = Number(result.recoveredValue);
     const eligibleValue = Number(result.eligibleValue);
+    const dailyByDate = new Map(agreementDailyTotals.map((item) => [item.date, {
+      count: Number(item.count), amount: Number(item.amount),
+    }]));
+    const agreementDailyHistory = Array.from({ length: 30 }, (_, index) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - index));
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(date);
+      const datePart = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+      const dateKey = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
+      const daily = dailyByDate.get(dateKey) ?? { count: 0, amount: 0 };
+      return { date: dateKey, ...daily };
+    });
 
     return {
       totalContracts,
@@ -548,6 +575,7 @@ export class WalletsService implements OnModuleDestroy {
       commissionRealizedValue: Number(result.commissionRealizedValue),
       discountsConcededValue: Number(result.discountsConcededValue),
       efficiencyRate: eligibleValue > 0 ? Math.round((recoveredValue / eligibleValue) * 10_000) / 100 : 0,
+      agreementDailyHistory,
     };
   }
 }
