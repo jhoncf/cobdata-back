@@ -151,6 +151,10 @@ enum ApiKeyScope {
   PIX_CREATE
 }
 
+enum CreditorIntegrationType {
+  IXC
+}
+
 // ============ CORE ============
 
 model Account {
@@ -176,6 +180,7 @@ model Account {
   ligueLeadWebhookEvents   LigueLeadWebhookEvent[]
   contractInteractions     ContractInteraction[]
   apiKeys                  ApiKey[]
+  creditorIntegrations     CreditorIntegration[]
 }
 
 model ApiKey {
@@ -281,13 +286,36 @@ model Creditor {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  portalUsers             User[]
+  portalUsers User[]
 
-  account Account  @relation(fields: [accountId], references: [id])
-  wallets Wallet[]
-  apiKeys ApiKey[]
+  account         Account                  @relation(fields: [accountId], references: [id])
+  wallets         Wallet[]
+  apiKeys         ApiKey[]
   discountBands   CreditorDiscountBand[]
   commissionBands CreditorCommissionBand[]
+  integrations    CreditorIntegration[]
+}
+
+/// Credentials and connection settings for creditor-owned external systems.
+/// Secrets are encrypted at rest and are never included in API responses.
+model CreditorIntegration {
+  id                   String                  @id @default(uuid())
+  accountId            String
+  creditorId           String
+  type                 CreditorIntegrationType
+  baseUrl              String
+  accessTokenEncrypted String
+  lastTestedAt         DateTime?
+  lastTestSucceeded    Boolean?
+  lastTestMessage      String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  account  Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  creditor Creditor @relation(fields: [creditorId], references: [id], onDelete: Cascade)
+
+  @@unique([creditorId, type])
+  @@index([accountId, type])
 }
 
 /// Commercial maximums negotiated with a creditor for each debt-age range.
@@ -357,16 +385,16 @@ model Wallet {
 /// Wallet strategy by aging range. The creditor policy remains the live ceiling;
 /// these fields describe what this wallet is allowed to offer below that ceiling.
 model WalletDiscountBand {
-  id                         String   @id @default(uuid())
-  walletId                   String
-  minAgingDays               Int
-  maxAgingDays               Int?
-  cashDiscountPercent        Decimal  @db.Decimal(5, 2)
-  installmentDiscountPercent Decimal  @db.Decimal(5, 2)
+  id                                 String   @id @default(uuid())
+  walletId                           String
+  minAgingDays                       Int
+  maxAgingDays                       Int?
+  cashDiscountPercent                Decimal  @db.Decimal(5, 2)
+  installmentDiscountPercent         Decimal  @db.Decimal(5, 2)
   cashStrategyDiscountPercent        Decimal? @db.Decimal(5, 2)
   installmentStrategyDiscountPercent Decimal? @db.Decimal(5, 2)
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 

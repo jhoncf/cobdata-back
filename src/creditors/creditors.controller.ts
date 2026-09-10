@@ -15,7 +15,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CreditorsService } from './creditors.service';
-import { CreateCreditorDto, UpdateCreditorDto, ListCreditorsQueryDto, UpsertCommercialRulesDto } from './dto';
+import {
+  CreateCreditorDto,
+  UpdateCreditorDto,
+  ListCreditorsQueryDto,
+  TestIxcIntegrationDto,
+  UpsertCommercialRulesDto,
+  UpsertIxcIntegrationDto,
+} from './dto';
 import { InviteCreditorUserDto } from '../users/dto';
 import { UsersService } from '../users/users.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,18 +35,28 @@ import { Request } from 'express';
 @ApiBearerAuth('bearer')
 @Controller('creditors')
 export class CreditorsController {
-  constructor(private readonly creditorsService: CreditorsService, private readonly usersService: UsersService) {}
+  constructor(
+    private readonly creditorsService: CreditorsService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Get(':id/users')
   @Roles('ADMIN')
-  async listPortalUsers(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  async listPortalUsers(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.usersService.listCreditorUsers(id, user.accountId);
   }
 
   @Post(':id/users/invite')
   @Roles('ADMIN')
   @HttpCode(HttpStatus.CREATED)
-  async invitePortalUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: InviteCreditorUserDto, @CurrentUser() user: AuthenticatedUser) {
+  async invitePortalUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: InviteCreditorUserDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.usersService.inviteCreditorUser(id, dto, user.accountId);
   }
 
@@ -47,21 +64,24 @@ export class CreditorsController {
   @Roles('ADMIN', 'OPERATIONAL')
   @HttpCode(HttpStatus.CREATED)
   @Audit({ action: 'CREDITOR_CREATE', resourceType: 'Creditor' })
-  @ApiOperation({ summary: 'Create a creditor', description: 'Register a new creditor with name, CNPJ, contacts and address' })
+  @ApiOperation({
+    summary: 'Create a creditor',
+    description: 'Register a new creditor with name, CNPJ, contacts and address',
+  })
   @ApiResponse({ status: 201, description: 'Creditor created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - VIEWER cannot create creditors' })
   @ApiResponse({ status: 409, description: 'CNPJ already in use' })
   @ApiResponse({ status: 422, description: 'Validation error' })
-  async create(
-    @Body() dto: CreateCreditorDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  async create(@Body() dto: CreateCreditorDto, @CurrentUser() user: AuthenticatedUser) {
     return this.creditorsService.create(dto, user.accountId);
   }
 
   @Get()
-  @ApiOperation({ summary: 'List creditors', description: 'Paginated list of creditors with optional search by name/CNPJ' })
+  @ApiOperation({
+    summary: 'List creditors',
+    description: 'Paginated list of creditors with optional search by name/CNPJ',
+  })
   @ApiResponse({ status: 200, description: 'Paginated list of creditors' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async list(
@@ -75,21 +95,24 @@ export class CreditorsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get creditor by ID', description: 'Returns creditor details including name, CNPJ, contacts and address' })
+  @ApiOperation({
+    summary: 'Get creditor by ID',
+    description: 'Returns creditor details including name, CNPJ, contacts and address',
+  })
   @ApiResponse({ status: 200, description: 'Creditor details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Creditor not found' })
-  async findById(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  async findById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.creditorsService.findById(id, user.accountId);
   }
 
   @Patch(':id')
   @Roles('ADMIN', 'OPERATIONAL')
   @Audit({ action: 'CREDITOR_UPDATE', resourceType: 'Creditor' })
-  @ApiOperation({ summary: 'Update a creditor', description: 'Update creditor name, CNPJ, contacts or address' })
+  @ApiOperation({
+    summary: 'Update a creditor',
+    description: 'Update creditor name, CNPJ, contacts or address',
+  })
   @ApiResponse({ status: 200, description: 'Creditor updated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - VIEWER cannot update creditors' })
@@ -106,7 +129,10 @@ export class CreditorsController {
 
   @Get(':id/commercial-rules')
   @ApiOperation({ summary: 'Get creditor discount and commission bands' })
-  async getCommercialRules(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  async getCommercialRules(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.creditorsService.getCommercialRules(id, user.accountId);
   }
 
@@ -122,20 +148,53 @@ export class CreditorsController {
     return this.creditorsService.upsertCommercialRules(id, dto, user.accountId);
   }
 
+  @Get(':id/integrations/ixc')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @ApiOperation({ summary: 'Get IXC integration configuration without exposing the access token' })
+  async getIxcIntegration(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.creditorsService.getIxcIntegration(id, user.accountId);
+  }
+
+  @Put(':id/integrations/ixc')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @Audit({ action: 'CREDITOR_IXC_INTEGRATION_UPSERT', resourceType: 'Creditor' })
+  @ApiOperation({ summary: 'Save IXC URL and encrypted token for a creditor' })
+  async upsertIxcIntegration(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpsertIxcIntegrationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.creditorsService.upsertIxcIntegration(id, dto, user.accountId);
+  }
+
+  @Post(':id/integrations/ixc/test')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @ApiOperation({ summary: 'Test IXC access using a read-only title query' })
+  async testIxcIntegration(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TestIxcIntegrationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.creditorsService.testIxcIntegration(id, dto, user.accountId);
+  }
+
   @Delete(':id')
   @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @Audit({ action: 'CREDITOR_DELETE', resourceType: 'Creditor' })
-  @ApiOperation({ summary: 'Soft-delete a creditor', description: 'Logically delete a creditor and cascade to wallets (ADMIN only)' })
+  @ApiOperation({
+    summary: 'Soft-delete a creditor',
+    description: 'Logically delete a creditor and cascade to wallets (ADMIN only)',
+  })
   @ApiResponse({ status: 200, description: 'Creditor deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - ADMIN only' })
   @ApiResponse({ status: 404, description: 'Creditor not found' })
   @ApiResponse({ status: 409, description: 'Creditor has wallets with contracts' })
-  async softDelete(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  async softDelete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     await this.creditorsService.softDelete(id, user.accountId);
     return { message: 'Creditor deleted successfully' };
   }
