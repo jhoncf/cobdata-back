@@ -28,6 +28,8 @@ export interface WalletSummary {
   commissionRealizedValue: number;
   discountsConcededValue: number;
   efficiencyRate: number;
+  agreementHistoryTotal: number;
+  agreementHistoryDatedCount: number;
   agreementDailyHistory: Array<{ date: string; count: number; amount: number }>;
 }
 
@@ -482,6 +484,8 @@ export class WalletsService implements OnModuleDestroy {
         commissionRealizedValue: Prisma.Decimal;
         discountsConcededValue: Prisma.Decimal;
         eligibleValue: Prisma.Decimal;
+        agreementHistoryTotal: bigint;
+        agreementHistoryDatedCount: bigint;
       }>>(Prisma.sql`
         SELECT COUNT(*)::bigint AS "totalContracts",
                COALESCE(SUM("updatedValue"), 0) AS "totalValue",
@@ -508,6 +512,8 @@ export class WalletsService implements OnModuleDestroy {
                ), 0) AS "commissionRealizedValue",
                COALESCE(SUM(GREATEST("updatedValue" - COALESCE("offerValue", "updatedValue"), 0)), 0) AS "discountsConcededValue",
                COALESCE(SUM("updatedValue") FILTER (WHERE "status" = 'ACTIVE'), 0) AS "eligibleValue"
+               , COUNT(*) FILTER (WHERE "paymentStatus" IN ('IN_AGREEMENT', 'PAID', 'AGREEMENT_BREACHED'))::bigint AS "agreementHistoryTotal"
+               , COUNT(*) FILTER (WHERE "paymentStatus" IN ('IN_AGREEMENT', 'PAID', 'AGREEMENT_BREACHED') AND "agreementCreatedAt" IS NOT NULL)::bigint AS "agreementHistoryDatedCount"
         FROM "Contract"
         WHERE "walletId" = ${walletId} AND "deletedAt" IS NULL AND "status" = 'ACTIVE'
       `),
@@ -541,6 +547,7 @@ export class WalletsService implements OnModuleDestroy {
       totalContracts: BigInt(0), totalValue: new Prisma.Decimal(0), serasaCount: BigInt(0), serasaValue: new Prisma.Decimal(0),
       recoveredValue: new Prisma.Decimal(0), repasseForecastValue: new Prisma.Decimal(0), repasseRealizedValue: new Prisma.Decimal(0),
       commissionForecastValue: new Prisma.Decimal(0), commissionRealizedValue: new Prisma.Decimal(0), discountsConcededValue: new Prisma.Decimal(0), eligibleValue: new Prisma.Decimal(0),
+      agreementHistoryTotal: BigInt(0), agreementHistoryDatedCount: BigInt(0),
     };
     const totalContracts = Number(result.totalContracts);
     const totalValue = Number(result.totalValue);
@@ -575,6 +582,8 @@ export class WalletsService implements OnModuleDestroy {
       commissionRealizedValue: Number(result.commissionRealizedValue),
       discountsConcededValue: Number(result.discountsConcededValue),
       efficiencyRate: eligibleValue > 0 ? Math.round((recoveredValue / eligibleValue) * 10_000) / 100 : 0,
+      agreementHistoryTotal: Number(result.agreementHistoryTotal),
+      agreementHistoryDatedCount: Number(result.agreementHistoryDatedCount),
       agreementDailyHistory,
     };
   }
