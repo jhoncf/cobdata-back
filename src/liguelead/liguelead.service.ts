@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,8 @@ import { SendLigueLeadCallsDto, SendLigueLeadSmsDto, UpsertLigueLeadAgentDto } f
 
 @Injectable()
 export class LigueLeadService {
+  private readonly logger = new Logger(LigueLeadService.name);
+
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
 
   private credentials() {
@@ -16,17 +18,29 @@ export class LigueLeadService {
   }
 
   private async request(path: string, init: RequestInit) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.config.get<number>('LIGUELEAD_TIMEOUT') ?? 30000);
-    try {
-      const response = await fetch(`${this.config.get<string>('LIGUELEAD_API_URL')}${path}`, { ...init, headers: { ...this.credentials(), ...init.headers }, signal: controller.signal });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new BadGatewayException(body?.message || body?.error || 'Falha na comunicação com a LigueLead');
-      return body;
-    } catch (error) {
-      if (error instanceof BadGatewayException || error instanceof ServiceUnavailableException) throw error;
-      throw new BadGatewayException('Não foi possível comunicar com a LigueLead');
-    } finally { clearTimeout(timer); }
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.config.get<number>('LIGUELEAD_TIMEOUT') ?? 30000);
+      try {
+        const response = await fetch(`${this.config.get<string>('LIGUELEAD_API_URL')}${path}`, { ...init, headers: { ...this.credentials(), ...init.headers }, signal: controller.signal });
+        const body = await response.json().catch(() => ({}));
+        if (response.ok) return body;
+
+        const providerMessage = String(body?.message || body?.error || 'Falha na comunicação com a LigueLead');
+        const retryable = [502, 503, 504].includes(response.status);
+        this.logger.warn(`LigueLead ${init.method ?? 'GET'} ${path} falhou (status=${response.status}, tentativa=${attempt}/${maxAttempts}): ${providerMessage}`);
+        if (!retryable || attempt === maxAttempts) throw new BadGatewayException(providerMessage);
+      } catch (error) {
+        if (error instanceof BadGatewayException || error instanceof ServiceUnavailableException) throw error;
+        this.logger.error(`LigueLead ${init.method ?? 'GET'} ${path} não respondeu na tentativa ${attempt}/${maxAttempts}`, error instanceof Error ? error.stack : undefined);
+        if (attempt === maxAttempts) throw new BadGatewayException('Não foi possível comunicar com a LigueLead');
+      } finally {
+        clearTimeout(timer);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500 * (2 ** (attempt - 1))));
+    }
+    throw new BadGatewayException('Não foi possível comunicar com a LigueLead');
   }
 
   private async wallet(walletId: string, accountId: string, scopes?: string[]) {
