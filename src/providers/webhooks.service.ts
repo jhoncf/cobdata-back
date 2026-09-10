@@ -489,6 +489,7 @@ export class WebhooksService {
         paymentStatus: totalInstallments && totalInstallments > 1
           ? PaymentStatus.INSTALLMENT
           : PaymentStatus.IN_AGREEMENT,
+        agreementCreatedAt: new Date(),
         ...projection,
       },
     });

@@ -585,6 +585,8 @@ model Contract {
   debtId                    String?
   agreementReference        String?
   agreementTotalAmount      Decimal?       @db.Decimal(15, 2)
+  /// Instant in which the current agreement was generated or received from a channel.
+  agreementCreatedAt        DateTime?
   agreementInstallments     Json?
   agreementDueAt            DateTime?
   totalInstallments         Int?
@@ -609,6 +611,7 @@ model Contract {
   @@index([walletId, serasaStatus])
   @@index([walletId, paymentStatus])
   @@index([walletId, totalInstallments])
+  @@index([accountId, agreementCreatedAt])
   @@index([walletId, status, deletedAt])
   @@index([accountId, walletId, deletedAt, createdAt(sort: Desc)])
   @@index([debtorDocumentHash])

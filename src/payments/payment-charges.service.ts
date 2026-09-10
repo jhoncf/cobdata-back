@@ -637,6 +637,7 @@ export class PaymentChargesService {
         paymentStatus: PaymentStatus.IN_AGREEMENT,
         agreementReference: charge.externalId ?? charge.txid ?? charge.id,
         agreementTotalAmount: charge.amount,
+        agreementCreatedAt: new Date(),
         agreedPaymentAmount: charge.amount,
         totalInstallments: 1,
         paidInstallments: 0,
