@@ -186,9 +186,14 @@ export class LigueLeadService {
     const url = new URL(baseUrl);
     url.searchParams.set('cpf', debtorDocument.replace(/\D/g, ''));
     url.searchParams.set('contract', contractId);
-    // The provider rejects the word "Pix" in SMS content. Keep the payment
-    // link intact while using neutral wording that is accepted for delivery.
-    return `${message.trim()} ${url.toString()}`.trim().replace(/\bpix\b/gi, 'pagamento');
+    // Keep the landing page link as an explicit final call to action. It is
+    // unique per contract and the public page validates that it belongs to the
+    // CPF before allowing a payment to be issued.
+    // The provider rejects the word "Pix" in SMS content, so use neutral
+    // wording while keeping the link intact for delivery.
+    return `${message.trim()} Acesse para consultar e regularizar: ${url.toString()}`
+      .trim()
+      .replace(/\bpix\b/gi, 'pagamento');
   }
 
   private spellDigits(value: string) {
