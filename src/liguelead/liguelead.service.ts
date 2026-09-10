@@ -95,7 +95,7 @@ export class LigueLeadService {
     // debtor from receiving another debtor's payment link in a batch campaign.
     const dispatchedContracts = await Promise.all(contracts.map(async (contract) => {
       const message = this.smsMessageWithPaymentLink(
-        dto.message || wallet.smsTemplate || 'Olá! Identificamos uma pendência. Consulte e regularize sua situação.',
+        dto.message,
         contract.id,
         contract.debtorDocument,
       );
@@ -104,7 +104,7 @@ export class LigueLeadService {
         method: 'POST',
         body: JSON.stringify({ title: dto.title, message, phones: [this.normalizePhone(contract.debtorPhone!)] }),
       });
-      return { ...contract, externalCampaignId: remote?.data?.campaign_id ?? remote?.campaign_id };
+      return { ...contract, externalCampaignId: remote?.data?.campaign_id ?? remote?.campaign_id, outgoingMessage: message };
     }));
     return this.createDispatchWithInteractions({
       accountId, walletId, userId, type: 'SMS', title: dto.title, channel: 'SMS', contracts: dispatchedContracts,
@@ -182,7 +182,7 @@ export class LigueLeadService {
 
   private async createDispatchWithInteractions({ accountId, walletId, userId, type, title, externalId, channel, contracts }: {
     accountId: string; walletId: string; userId: string; type: 'SMS' | 'AI_CALL'; title: string; externalId?: string;
-    channel: 'SMS' | 'AI_VOICE_CALL'; contracts: Array<{ id: string; debtorPhone: string | null; externalCampaignId?: string }>;
+    channel: 'SMS' | 'AI_VOICE_CALL'; contracts: Array<{ id: string; debtorPhone: string | null; externalCampaignId?: string; outgoingMessage?: string }>;
   }) {
     return this.prisma.$transaction(async (tx) => {
       const dispatch = await tx.ligueLeadDispatch.create({
@@ -202,6 +202,7 @@ export class LigueLeadService {
           externalId: contract.externalCampaignId ?? externalId,
           contact: this.normalizePhone(contract.debtorPhone!),
           summary: type === 'SMS' ? 'SMS enviado para processamento' : 'Ligação com IA enviada para processamento',
+          ...(type === 'SMS' ? { payload: { title, message: contract.outgoingMessage } } : {}),
         })),
       });
       return dispatch;
