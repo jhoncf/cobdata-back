@@ -33,6 +33,26 @@ export class PublicDebtController {
     return GeneratePixResponseDto.fromEntity(charge);
   }
 
+  @Get('access/:token')
+  @ApiOperation({ summary: 'Open a temporary SMS debt link and mark the interaction as read' })
+  async openAccessLink(@Param('token') token: string) {
+    return this.debts.openAccessLink(token);
+  }
+
+  @Post('access/:token/pix')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Generate Pix from a temporary SMS debt link' })
+  async generatePixFromAccessLink(@Param('token') token: string, @Req() req: Request): Promise<GeneratePixResponseDto> {
+    const charge = await this.debts.generatePixFromAccessLink(token, (req as any).id ?? 'public');
+    return GeneratePixResponseDto.fromEntity(charge);
+  }
+
+  @Get('access/:token/charges/:chargeId')
+  @ApiOperation({ summary: 'Check payment status using a temporary SMS debt link' })
+  async accessLinkChargeStatus(@Param('token') token: string, @Param('chargeId') chargeId: string) {
+    return this.debts.getChargeStatusFromAccessLink(token, chargeId);
+  }
+
   @Get('charges/:chargeId')
   @ApiOperation({ summary: 'Check the public Pix charge payment status' })
   async chargeStatus(

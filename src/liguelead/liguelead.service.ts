@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
-import { createHash, timingSafeEqual } from 'crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -91,21 +91,33 @@ export class LigueLeadService {
   async sendSms(walletId: string, accountId: string, userId: string, dto: SendLigueLeadSmsDto, scopes?: string[]) {
     const wallet = await this.wallet(walletId, accountId, scopes);
     const contracts = await this.eligibleContracts(walletId, accountId, dto.contractIds);
+    const expiresAt = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000));
+    const linksByContractId = new Map(await Promise.all(contracts.map(async (contract) => {
+      const link = await this.prisma.publicDebtAccessLink.create({
+        data: { token: randomUUID(), accountId, walletId, contractId: contract.id, expiresAt },
+      });
+      return [contract.id, link] as const;
+    })));
     // Each contract receives a unique link. Sending separately prevents one
     // debtor from receiving another debtor's payment link in a batch campaign.
     const dispatchedContracts = await Promise.all(contracts.map(async (contract) => {
+      const accessLink = linksByContractId.get(contract.id)!;
       const message = this.smsMessageWithPaymentLink(
         dto.message,
-        contract.id,
-        contract.debtorDocument,
+        accessLink.token,
         wallet.creditor?.name,
       );
       if (message.length > 1600) throw new BadRequestException('A mensagem de SMS, incluindo o link de pagamento, excede 1600 caracteres');
-      const remote = await this.request('/v1/sms', {
-        method: 'POST',
-        body: JSON.stringify({ title: dto.title, message, phones: [this.normalizePhone(contract.debtorPhone!)] }),
-      });
-      return { ...contract, externalCampaignId: remote?.data?.campaign_id ?? remote?.campaign_id, outgoingMessage: message };
+      try {
+        const remote = await this.request('/v1/sms', {
+          method: 'POST',
+          body: JSON.stringify({ title: dto.title, message, phones: [this.normalizePhone(contract.debtorPhone!)] }),
+        });
+        return { ...contract, externalCampaignId: remote?.data?.campaign_id ?? remote?.campaign_id, outgoingMessage: message, trackingLinkId: accessLink.id };
+      } catch (error) {
+        await this.prisma.publicDebtAccessLink.delete({ where: { id: accessLink.id } }).catch(() => undefined);
+        throw error;
+      }
     }));
     return this.createDispatchWithInteractions({
       accountId, walletId, userId, type: 'SMS', title: dto.title, channel: 'SMS', contracts: dispatchedContracts,
@@ -183,7 +195,7 @@ export class LigueLeadService {
 
   private async createDispatchWithInteractions({ accountId, walletId, userId, type, title, externalId, channel, contracts }: {
     accountId: string; walletId: string; userId: string; type: 'SMS' | 'AI_CALL'; title: string; externalId?: string;
-    channel: 'SMS' | 'AI_VOICE_CALL'; contracts: Array<{ id: string; debtorPhone: string | null; externalCampaignId?: string; outgoingMessage?: string }>;
+    channel: 'SMS' | 'AI_VOICE_CALL'; contracts: Array<{ id: string; debtorPhone: string | null; externalCampaignId?: string; outgoingMessage?: string; trackingLinkId?: string }>;
   }) {
     return this.prisma.$transaction(async (tx) => {
       const dispatch = await tx.ligueLeadDispatch.create({
@@ -192,8 +204,9 @@ export class LigueLeadService {
           items: { create: contracts.map((contract) => ({ contractId: contract.id, phone: this.normalizePhone(contract.debtorPhone!), externalCampaignId: contract.externalCampaignId ?? externalId })) },
         },
       });
-      await tx.contractInteraction.createMany({
-        data: contracts.map((contract) => ({
+      for (const contract of contracts) {
+        const interaction = await tx.contractInteraction.create({
+          data: {
           accountId,
           walletId,
           contractId: contract.id,
@@ -204,8 +217,12 @@ export class LigueLeadService {
           contact: this.normalizePhone(contract.debtorPhone!),
           summary: type === 'SMS' ? 'SMS enviado para processamento' : 'Ligação com IA enviada para processamento',
           ...(type === 'SMS' ? { payload: { title, message: contract.outgoingMessage } } : {}),
-        })),
-      });
+          },
+        });
+        if (contract.trackingLinkId) {
+          await tx.publicDebtAccessLink.update({ where: { id: contract.trackingLinkId }, data: { interactionId: interaction.id } });
+        }
+      }
       return dispatch;
     });
   }
@@ -252,11 +269,10 @@ export class LigueLeadService {
 
   private normalizePhone(phone: string) { return phone.replace(/\D/g, '').replace(/^55(?=\d{11}$)/, ''); }
 
-  private smsMessageWithPaymentLink(message: string, contractId: string, debtorDocument: string, creditorName?: string) {
+  private smsMessageWithPaymentLink(message: string, accessToken: string, creditorName?: string) {
     const baseUrl = this.config.get<string>('PUBLIC_PAYMENT_URL')!;
     const url = new URL(baseUrl);
-    url.searchParams.set('cpf', debtorDocument.replace(/\D/g, ''));
-    url.searchParams.set('contract', contractId);
+    url.searchParams.set('access', accessToken);
     const creditor = creditorName?.trim() || 'seu credor';
     const intro = `Olá! A oferta de regularização com ${creditor} continua válida.`;
     const normalizedMessage = this.normalizeSmsText(message);

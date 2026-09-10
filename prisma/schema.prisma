@@ -179,6 +179,7 @@ model Account {
   ligueLeadDispatches      LigueLeadDispatch[]
   ligueLeadWebhookEvents   LigueLeadWebhookEvent[]
   contractInteractions     ContractInteraction[]
+  publicDebtAccessLinks    PublicDebtAccessLink[]
   apiKeys                  ApiKey[]
   creditorIntegrations     CreditorIntegration[]
 }
@@ -381,6 +382,7 @@ model Wallet {
   ligueLeadAgent       LigueLeadWalletAgent?
   ligueLeadDispatches  LigueLeadDispatch[]
   contractInteractions ContractInteraction[]
+  publicDebtAccessLinks PublicDebtAccessLink[]
 }
 
 /// Wallet strategy by aging range. The creditor policy remains the live ceiling;
@@ -508,10 +510,33 @@ model ContractInteraction {
   account  Account  @relation(fields: [accountId], references: [id])
   wallet   Wallet   @relation(fields: [walletId], references: [id])
   contract Contract @relation(fields: [contractId], references: [id])
+  publicDebtAccessLink PublicDebtAccessLink?
 
   @@index([contractId, occurredAt])
   @@index([walletId, channel, status])
   @@index([provider, externalId])
+}
+
+/// Short-lived, opaque links used in outbound SMS. The token is a bearer
+/// reference to exactly one contract and never exposes CPF or contract IDs.
+model PublicDebtAccessLink {
+  id            String   @id @default(uuid())
+  token         String   @unique
+  accountId     String
+  walletId      String
+  contractId    String
+  interactionId String?  @unique
+  expiresAt     DateTime
+  openedAt      DateTime?
+  createdAt     DateTime @default(now())
+
+  account     Account              @relation(fields: [accountId], references: [id])
+  wallet      Wallet               @relation(fields: [walletId], references: [id])
+  contract    Contract             @relation(fields: [contractId], references: [id])
+  interaction ContractInteraction? @relation(fields: [interactionId], references: [id], onDelete: SetNull)
+
+  @@index([contractId, expiresAt])
+  @@index([expiresAt])
 }
 
 model WhatsAppBotConversation {
@@ -608,6 +633,7 @@ model Contract {
   paymentSettlements     PaymentSettlement[]
   ligueLeadDispatchItems LigueLeadDispatchItem[]
   interactions           ContractInteraction[]
+  publicDebtAccessLinks  PublicDebtAccessLink[]
 
   @@index([walletId, serasaStatus])
   @@index([walletId, paymentStatus])

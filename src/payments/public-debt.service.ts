@@ -18,6 +18,31 @@ export class PublicDebtService {
     return normalized;
   }
 
+  private readonly publicContractSelect = {
+    id: true,
+    contractNumber: true,
+    debtorName: true,
+    productName: true,
+    dueDate: true,
+    updatedValue: true,
+    offerValue: true,
+    wallet: { select: { cobcomDiscountPercent: true, creditor: { select: { name: true, cnpj: true } } } },
+  } as const;
+
+  private toPublicContract(contract: any) {
+    return {
+      id: contract.id,
+      contractNumber: contract.contractNumber,
+      debtorName: contract.debtorName,
+      productName: contract.productName,
+      dueDate: contract.dueDate,
+      amount: (contract.offerValue ?? new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(contract.wallet.cobcomDiscountPercent)).div(100).toDecimalPlaces(2)).toString(),
+      updatedAmount: contract.updatedValue.toString(),
+      cobcomDiscountPercent: contract.wallet.cobcomDiscountPercent.toString(),
+      creditor: contract.wallet.creditor,
+    };
+  }
+
   async lookup(document: string, accountId?: string, contractNumber?: string, creditorId?: string) {
     const debtorDocument = this.normalizeDocument(document);
     const contracts = await this.prisma.contract.findMany({
@@ -31,30 +56,63 @@ export class PublicDebtService {
         updatedValue: { gt: 0 },
         wallet: { status: 'ACTIVE', deletedAt: null, ...(creditorId ? { creditorId } : {}) },
       },
-      select: {
-        id: true,
-        contractNumber: true,
-        debtorName: true,
-        productName: true,
-        dueDate: true,
-        updatedValue: true,
-        offerValue: true,
-        wallet: { select: { cobcomDiscountPercent: true, creditor: { select: { name: true, cnpj: true } } } },
-      },
+      select: this.publicContractSelect,
       orderBy: { dueDate: 'asc' },
     });
 
-    return contracts.map((contract) => ({
-      id: contract.id,
-      contractNumber: contract.contractNumber,
-      debtorName: contract.debtorName,
-      productName: contract.productName,
-      dueDate: contract.dueDate,
-      amount: (contract.offerValue ?? new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(contract.wallet.cobcomDiscountPercent)).div(100).toDecimalPlaces(2)).toString(),
-      updatedAmount: contract.updatedValue.toString(),
-      cobcomDiscountPercent: contract.wallet.cobcomDiscountPercent.toString(),
-      creditor: contract.wallet.creditor,
-    }));
+    return contracts.map((contract) => this.toPublicContract(contract));
+  }
+
+  private async activeAccessLink(token: string) {
+    const link = await this.prisma.publicDebtAccessLink.findFirst({
+      where: {
+        token,
+        expiresAt: { gt: new Date() },
+        contract: {
+          status: 'ACTIVE',
+          paymentStatus: { not: 'PAID' },
+          deletedAt: null,
+          updatedValue: { gt: 0 },
+          wallet: { status: 'ACTIVE', deletedAt: null },
+        },
+      },
+      include: { contract: { select: { ...this.publicContractSelect, accountId: true } } },
+    });
+    if (!link) throw new NotFoundException('Este link não é mais válido. Faça uma nova consulta.');
+    return link;
+  }
+
+  async openAccessLink(token: string) {
+    const link = await this.activeAccessLink(token);
+    const openedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const opened = await tx.publicDebtAccessLink.updateMany({
+        where: { id: link.id, openedAt: null },
+        data: { openedAt },
+      });
+      if (opened.count && link.interactionId) {
+        await tx.contractInteraction.update({
+          where: { id: link.interactionId },
+          data: { status: 'READ', summary: 'SMS lido: link temporário acessado', occurredAt: openedAt },
+        });
+      }
+    });
+    return { contract: this.toPublicContract(link.contract), expiresAt: link.expiresAt };
+  }
+
+  async generatePixFromAccessLink(token: string, requestId: string) {
+    const link = await this.activeAccessLink(token);
+    return this.paymentCharges.createPixForContract(link.contractId, link.contract.accountId, undefined, requestId);
+  }
+
+  async getChargeStatusFromAccessLink(token: string, chargeId: string) {
+    const link = await this.activeAccessLink(token);
+    const charge = await this.prisma.paymentCharge.findFirst({
+      where: { id: chargeId, contractId: link.contractId },
+      select: { status: true, paidAt: true },
+    });
+    if (!charge) throw new NotFoundException('Cobrança não encontrada.');
+    return charge;
   }
 
   async generatePix(contractId: string, document: string, requestId: string) {
