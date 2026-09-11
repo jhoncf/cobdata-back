@@ -441,8 +441,6 @@ export class OperationsService {
         },
       }),
     ]);
-    });
-
     return {
       contractId,
       status: ContractStatus.CANCELLED,
