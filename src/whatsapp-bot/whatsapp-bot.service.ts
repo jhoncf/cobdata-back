@@ -5,6 +5,7 @@ import { timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicDebtService } from '../payments/public-debt.service';
 import { CryptoService } from '../providers/crypto.service';
+import { OperationsService } from '../providers/operations.service';
 
 type Debt = { id: string; contractNumber: string; dueDate: Date | null; amount: string; updatedAmount?: string; cobcomDiscountPercent?: string; creditor: { name: string; cnpj: string | null } };
 type ChatwootPayload = Record<string, any>;
@@ -20,6 +21,7 @@ export class WhatsAppBotService {
     private readonly debts: PublicDebtService,
     private readonly crypto: CryptoService,
     private readonly config: ConfigService,
+    private readonly operations: OperationsService,
   ) {
     this.bedrock = new BedrockRuntimeClient({ region: this.config.get<string>('BEDROCK_REGION') });
   }
@@ -166,8 +168,8 @@ export class WhatsAppBotService {
   private async dispute(contractId: string, contact: string): Promise<string[]> {
     const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
     if (!contract) return ['Não localizei esta pendência.'];
-    await this.prisma.contractInteraction.create({ data: { accountId: contract.accountId, walletId: contract.walletId, contractId, channel: 'WHATSAPP', status: 'ANSWERED', provider: 'chatwoot', contact, summary: 'Titular informou não reconhecer a dívida.' } });
-    return [`Tudo bem. Vamos respeitar sua solicitação.\n\nRegistrei sua manifestação sobre o contrato ${contract.contractNumber}. Sua solicitação será analisada e, se necessário, um responsável poderá entrar em contato. Para esclarecer a origem da pendência ou apresentar uma contestação, fale diretamente com o credor responsável.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
+    await this.operations.cancelForContest(contractId, contract.accountId, contact);
+    return [`Tudo bem. Vamos respeitar sua solicitação.\n\nO contrato ${contract.contractNumber} foi cancelado por motivo de contestação e desativado da carteira. Quando houver registro ativo na Serasa, a remoção também será solicitada. Um responsável poderá entrar em contato caso seja necessário.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
   }
 
   private async paymentCheck(conversation: any): Promise<string[]> {

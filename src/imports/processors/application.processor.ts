@@ -414,6 +414,11 @@ export class ApplicationProcessor extends WorkerHost {
                 existingContract.status === 'CANCELLED'
               ) {
                 updateData.status = 'ACTIVE';
+                // A new authoritative import reopens the debt; the prior
+                // cancellation remains in ContractInteraction, but is no
+                // longer the current administrative status.
+                updateData.cancellationReason = null;
+                updateData.cancelledAt = null;
               }
 
               await tx.contract.update({
@@ -430,7 +435,7 @@ export class ApplicationProcessor extends WorkerHost {
               ) {
                 await tx.contract.update({
                   where: { id: existingContract.id },
-                  data: { status: 'ACTIVE' },
+                  data: { status: 'ACTIVE', cancelledAt: null, cancellationReason: null },
                 });
                 updatedCount++;
               } else {

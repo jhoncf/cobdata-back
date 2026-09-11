@@ -67,6 +67,11 @@ enum ContractStatus {
   CANCELLED
 }
 
+enum CancellationReason {
+  CREDITOR_REQUEST
+  CONTESTATION
+}
+
 enum ImportBatchStatus {
   PENDING_VALIDATION
   VALIDATING
@@ -595,6 +600,7 @@ model Contract {
   debtorZipCode             String?
   isNegativated             Boolean        @default(false)
   cancelledAt               DateTime?
+  cancellationReason        CancellationReason?
   offer                     Json?
   offerValue                Decimal?       @db.Decimal(15, 2)
   offerDiscountPercent      Decimal?       @db.Decimal(5, 2)

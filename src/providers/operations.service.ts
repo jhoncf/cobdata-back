@@ -16,6 +16,9 @@ import {
   ContractStatus,
   SerasaStatus,
   PaymentStatus,
+  CancellationReason,
+  InteractionChannel,
+  InteractionStatus,
 } from '@prisma/client';
 
 // Each Serasa request is deliberately isolated to one debt. Besides making a
@@ -243,6 +246,9 @@ export class OperationsService {
       include: { wallet: { select: { id: true } } },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
+    if (action === OperationAction.CREATE_OR_UPDATE && contract.paymentStatus !== PaymentStatus.OPEN) {
+      throw new ConflictException('Apenas contratos financeiros em aberto podem ser sincronizados com a Serasa');
+    }
     const provider = await this.getSerasaProvider(accountId);
     const eligibleStatuses = action === OperationAction.REMOVE
       ? [...ELIGIBLE_FOR_REMOVE, SerasaStatus.SENT]
@@ -311,7 +317,7 @@ export class OperationsService {
         items: {
           where: {
             status: OperationItemStatus.WAITING_PROVIDER_EVENT,
-            contract: { status: ContractStatus.ACTIVE, paymentStatus: { not: PaymentStatus.PAID }, serasaStatus: SerasaStatus.SENT },
+            contract: { status: ContractStatus.ACTIVE, paymentStatus: PaymentStatus.OPEN, serasaStatus: SerasaStatus.SENT },
           },
           select: { contractId: true },
         },
@@ -369,6 +375,13 @@ export class OperationsService {
     userId: string,
     accountId: string,
     creditorId?: string | null,
+    cancellation: {
+      reason?: CancellationReason;
+      channel?: InteractionChannel;
+      provider?: string;
+      contact?: string;
+      summary?: string;
+    } = {},
   ) {
     const contract = await this.prisma.contract.findFirst({
       where: {
@@ -377,7 +390,7 @@ export class OperationsService {
         deletedAt: null,
         ...(creditorId ? { wallet: { creditorId } } : {}),
       },
-      select: { id: true, status: true, serasaStatus: true, debtId: true },
+      select: { id: true, walletId: true, status: true, serasaStatus: true, debtId: true },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
     if (contract.status === ContractStatus.CANCELLED) {
@@ -399,9 +412,35 @@ export class OperationsService {
       }
     }
 
-    await this.prisma.contract.update({
-      where: { id: contractId },
-      data: { status: ContractStatus.CANCELLED, cancelledAt: new Date() },
+    const reason = cancellation.reason ?? CancellationReason.CREDITOR_REQUEST;
+    const summary = cancellation.summary ?? (reason === CancellationReason.CONTESTATION
+      ? 'Contrato cancelado por motivo de contestação do titular.'
+      : 'Contrato cancelado por solicitação do credor.');
+    const cancelledAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.contract.update({
+        where: { id: contractId },
+        data: {
+          status: ContractStatus.CANCELLED,
+          cancelledAt,
+          cancellationReason: reason,
+        },
+      }),
+      this.prisma.contractInteraction.create({
+        data: {
+          accountId,
+          walletId: contract.walletId,
+          contractId,
+          channel: cancellation.channel ?? InteractionChannel.WHATSAPP,
+          status: InteractionStatus.COMPLETED,
+          provider: cancellation.provider,
+          contact: cancellation.contact,
+          summary,
+          payload: { cancellationReason: reason, serasaRemovalQueued },
+          occurredAt: cancelledAt,
+        },
+      }),
+    ]);
     });
 
     return {
@@ -409,6 +448,28 @@ export class OperationsService {
       status: ContractStatus.CANCELLED,
       serasaRemovalQueued,
     };
+  }
+
+  /** Cancels a debt after the holder disputes it in an authenticated channel. */
+  async cancelForContest(
+    contractId: string,
+    accountId: string,
+    contact?: string,
+    provider = 'chatwoot',
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: { accountId, isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!user) throw new UnprocessableEntityException('Não há usuário ativo para registrar a contestação');
+    return this.cancelContract(contractId, user.id, accountId, null, {
+      reason: CancellationReason.CONTESTATION,
+      channel: InteractionChannel.WHATSAPP,
+      provider,
+      contact,
+      summary: 'Contrato cancelado por motivo de contestação do titular via Chatwoot.',
+    });
   }
 
   private async getSerasaProvider(accountId: string) {
@@ -684,7 +745,9 @@ export class OperationsService {
     if (action === OperationAction.REMOVE) {
       where.debtId = { not: null };
     } else {
-      where.paymentStatus = { not: PaymentStatus.PAID };
+      // Serasa só recebe dívidas financeiramente em aberto. Acordos,
+      // parcelamentos, quebras e quitações não podem ser enviados/reenviados.
+      where.paymentStatus = PaymentStatus.OPEN;
     }
 
     if (filters.contractStatus && filters.contractStatus !== ContractStatus.ACTIVE) return Promise.resolve([]);
