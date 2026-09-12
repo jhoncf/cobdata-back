@@ -28,13 +28,15 @@ export class DashboardService {
         _count: { id: true },
         _sum: { agreementTotalAmount: true },
       }),
-      this.prisma.contract.count({
+      this.prisma.contract.aggregate({
         where: {
           accountId,
           deletedAt: null,
           paymentStatus: PaymentStatus.AGREEMENT_BREACHED,
           ...(creditorId ? { wallet: { creditorId } } : {}),
         },
+        _count: { id: true },
+        _sum: { agreementTotalAmount: true },
       }),
     ]);
 
@@ -46,7 +48,8 @@ export class DashboardService {
         amount: Number(aggregate._sum.agreementTotalAmount ?? 0),
       },
       breachedAgreements: {
-        count: breachedAgreements,
+        count: breachedAgreements._count.id,
+        amount: Number(breachedAgreements._sum.agreementTotalAmount ?? 0),
       },
     };
   }
