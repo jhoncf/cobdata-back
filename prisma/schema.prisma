@@ -519,6 +519,7 @@ model ContractInteraction {
 
   @@index([contractId, occurredAt])
   @@index([walletId, channel, status])
+  @@index([accountId, occurredAt])
   @@index([provider, externalId])
 }
 
@@ -952,6 +953,7 @@ model PaymentSettlement {
 
   @@unique([source, externalPaymentId])
   @@index([contractId])
+  @@index([accountId, paidAt])
 }
 
 // ============ AUDIT ============

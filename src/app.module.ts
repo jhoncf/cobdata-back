@@ -19,6 +19,7 @@ import { LigueLeadModule } from './liguelead/liguelead.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { WhatsAppBotModule } from './whatsapp-bot/whatsapp-bot.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportsModule } from './reports/reports.module';
 import { JwtAuthGuard, RolesGuard, ScopeGuard, MustResetPasswordGuard } from './common/guards';
 import { AuditInterceptor } from './common/interceptors';
 import { RequestIdMiddleware } from './common/middleware';
@@ -64,6 +65,7 @@ import { QUEUES } from './common/constants/queues';
     IntegrationsModule,
     WhatsAppBotModule,
     DashboardModule,
+    ReportsModule,
   ],
   controllers: [],
   providers: [
