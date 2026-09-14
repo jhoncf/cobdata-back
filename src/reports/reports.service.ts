@@ -19,12 +19,9 @@ export class ReportsService {
       lastPaymentAt: { gte: period.start, lt: period.end },
       ...(creditorId || walletId ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
     };
-    const [rows, total, aggregate] = await Promise.all([
-      this.prisma.contract.findMany({
+    const rows = await this.prisma.contract.findMany({
       where,
       orderBy: { lastPaymentAt: 'desc' },
-      skip: pagination.skip,
-      take: pagination.limit,
       select: {
         contractNumber: true,
         debtorName: true,
@@ -33,20 +30,21 @@ export class ReportsService {
         agreementTotalAmount: true,
         totalInstallments: true,
         paidInstallments: true,
+        totalPaidAmount: true,
         paymentStatus: true,
         wallet: { select: { name: true, creditor: { select: { name: true } } } },
       },
-      }),
-      this.prisma.contract.count({ where }),
-      this.prisma.contract.aggregate({ where, _sum: { agreementTotalAmount: true } }),
-    ]);
+    });
+    const paidRows = rows.filter((row) => this.isAgreementFullyPaid(row));
+    const total = paidRows.length;
+    const pageRows = paidRows.slice(pagination.skip, pagination.skip + pagination.limit);
 
     return {
       period: this.serializePeriod(period),
       total,
-      amount: Number(aggregate._sum.agreementTotalAmount ?? 0),
+      amount: paidRows.reduce((sum, row) => sum + Number(row.totalPaidAmount ?? row.agreementTotalAmount ?? 0), 0),
       meta: this.serializePagination(total, pagination),
-      data: rows.map((row) => ({
+      data: pageRows.map((row) => ({
         ...row,
         agreementTotalAmount: Number(row.agreementTotalAmount ?? 0),
       })),
@@ -73,13 +71,15 @@ export class ReportsService {
         agreementTotalAmount: true,
         totalInstallments: true,
         paidInstallments: true,
+        totalPaidAmount: true,
         wallet: { select: { name: true, creditor: { select: { name: true } } } },
       },
     });
+    const paidRows = rows.filter((row) => this.isAgreementFullyPaid(row));
     const header = ['Data do pagamento', 'Credor', 'Carteira', 'Número do contrato', 'Devedor', 'Referência do acordo', 'Valor pago', 'Parcelas pagas'];
-    const values = rows.map((row) => [
+    const values = paidRows.map((row) => [
       row.lastPaymentAt?.toISOString() ?? '', row.wallet.creditor.name, row.wallet.name, row.contractNumber,
-      row.debtorName ?? '', row.agreementReference ?? '', Number(row.agreementTotalAmount ?? 0).toFixed(2).replace('.', ','),
+      row.debtorName ?? '', row.agreementReference ?? '', Number(row.totalPaidAmount ?? row.agreementTotalAmount ?? 0).toFixed(2).replace('.', ','),
       `${row.paidInstallments}/${row.totalInstallments ?? 1}`,
     ]);
     return `\uFEFF${[header, ...values].map((line) => line.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n')}`;
@@ -96,6 +96,13 @@ export class ReportsService {
       ? firstWallet ? [{ id: firstWallet.creditor.id, name: firstWallet.creditor.name }] : []
       : await this.prisma.creditor.findMany({ where: { accountId, deletedAt: null }, orderBy: { name: 'asc' }, select: { id: true, name: true } });
     return { creditors, wallets: wallets.map(({ id, name, creditor }) => ({ id, name, creditorId: creditor.id })) };
+  }
+
+  private isAgreementFullyPaid(row: { totalInstallments: number | null; paidInstallments: number; agreementTotalAmount: unknown; totalPaidAmount: unknown }) {
+    const installments = Math.max(row.totalInstallments ?? 1, 1);
+    const agreementAmount = Number(row.agreementTotalAmount ?? 0);
+    const paidAmount = Number(row.totalPaidAmount ?? 0);
+    return row.paidInstallments >= installments && paidAmount >= agreementAmount - 0.01;
   }
 
   async pixPayments(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string, walletId?: string) {
