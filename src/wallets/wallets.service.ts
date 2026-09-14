@@ -524,6 +524,8 @@ export class WalletsService implements OnModuleDestroy {
         FROM "Contract"
         WHERE "walletId" = ${walletId}
           AND "deletedAt" IS NULL
+          AND "status" = 'ACTIVE'
+          AND "paymentStatus" IN ('IN_AGREEMENT', 'INSTALLMENT')
           AND "agreementCreatedAt" >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
           AND "agreementCreatedAt" < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
         GROUP BY ("agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date
