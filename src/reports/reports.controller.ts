@@ -16,8 +16,10 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.reportsService.serasaAgreements(user.accountId, user.creditorId ?? undefined, startDate, endDate);
+    return this.reportsService.serasaAgreements(user.accountId, user.creditorId ?? undefined, startDate, endDate, page, limit);
   }
 
   @Get('pix-payments')
@@ -26,8 +28,10 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.reportsService.pixPayments(user.accountId, user.creditorId ?? undefined, startDate, endDate);
+    return this.reportsService.pixPayments(user.accountId, user.creditorId ?? undefined, startDate, endDate, page, limit);
   }
 
   @Get('communications')
@@ -36,7 +40,9 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.reportsService.communications(user.accountId, user.creditorId ?? undefined, startDate, endDate);
+    return this.reportsService.communications(user.accountId, user.creditorId ?? undefined, startDate, endDate, page, limit);
   }
 }

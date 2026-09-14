@@ -8,18 +8,19 @@ type Period = { start: Date; end: Date };
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async serasaAgreements(accountId: string, creditorId?: string, startDate?: string, endDate?: string) {
+  async serasaAgreements(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string) {
     const period = this.resolvePeriod(startDate, endDate);
-    const rows = await this.prisma.contract.findMany({
-      where: {
-        accountId,
-        deletedAt: null,
-        agreementReference: { not: null },
-        agreementCreatedAt: { gte: period.start, lt: period.end },
-        ...(creditorId ? { wallet: { creditorId } } : {}),
-      },
+    const pagination = this.resolvePagination(pageValue, limitValue);
+    const where = {
+      accountId, deletedAt: null, agreementReference: { not: null }, agreementCreatedAt: { gte: period.start, lt: period.end },
+      ...(creditorId ? { wallet: { creditorId } } : {}),
+    };
+    const [rows, total, aggregate] = await Promise.all([
+      this.prisma.contract.findMany({
+      where,
       orderBy: { agreementCreatedAt: 'desc' },
-      take: 1_000,
+      skip: pagination.skip,
+      take: pagination.limit,
       select: {
         contractNumber: true,
         debtorName: true,
@@ -31,12 +32,16 @@ export class ReportsService {
         paymentStatus: true,
         wallet: { select: { name: true, creditor: { select: { name: true } } } },
       },
-    });
+      }),
+      this.prisma.contract.count({ where }),
+      this.prisma.contract.aggregate({ where, _sum: { agreementTotalAmount: true } }),
+    ]);
 
     return {
       period: this.serializePeriod(period),
-      total: rows.length,
-      amount: rows.reduce((sum, row) => sum + Number(row.agreementTotalAmount ?? 0), 0),
+      total,
+      amount: Number(aggregate._sum.agreementTotalAmount ?? 0),
+      meta: this.serializePagination(total, pagination),
       data: rows.map((row) => ({
         ...row,
         agreementTotalAmount: Number(row.agreementTotalAmount ?? 0),
@@ -44,18 +49,19 @@ export class ReportsService {
     };
   }
 
-  async pixPayments(accountId: string, creditorId?: string, startDate?: string, endDate?: string) {
+  async pixPayments(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string) {
     const period = this.resolvePeriod(startDate, endDate);
-    const rows = await this.prisma.paymentSettlement.findMany({
-      where: {
-        accountId,
-        source: PaymentSettlementSource.PIX,
-        status: PaymentSettlementStatus.CONFIRMED,
-        paidAt: { gte: period.start, lt: period.end },
-        ...(creditorId ? { contract: { wallet: { creditorId } } } : {}),
-      },
+    const pagination = this.resolvePagination(pageValue, limitValue);
+    const where = {
+      accountId, source: PaymentSettlementSource.PIX, status: PaymentSettlementStatus.CONFIRMED, paidAt: { gte: period.start, lt: period.end },
+      ...(creditorId ? { contract: { wallet: { creditorId } } } : {}),
+    };
+    const [rows, total, aggregate] = await Promise.all([
+      this.prisma.paymentSettlement.findMany({
+      where,
       orderBy: { paidAt: 'desc' },
-      take: 1_000,
+      skip: pagination.skip,
+      take: pagination.limit,
       select: {
         amount: true,
         paidAt: true,
@@ -69,28 +75,36 @@ export class ReportsService {
           },
         },
       },
-    });
+      }),
+      this.prisma.paymentSettlement.count({ where }),
+      this.prisma.paymentSettlement.aggregate({ where, _sum: { amount: true } }),
+    ]);
 
     return {
       period: this.serializePeriod(period),
-      total: rows.length,
-      amount: rows.reduce((sum, row) => sum + Number(row.amount), 0),
+      total,
+      amount: Number(aggregate._sum.amount ?? 0),
+      meta: this.serializePagination(total, pagination),
       data: rows.map((row) => ({ ...row, amount: Number(row.amount) })),
     };
   }
 
-  async communications(accountId: string, creditorId?: string, startDate?: string, endDate?: string) {
+  async communications(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string) {
     const period = this.resolvePeriod(startDate, endDate);
-    const rows = await this.prisma.contractInteraction.findMany({
-      where: {
-        accountId,
-        channel: { in: [InteractionChannel.SMS, InteractionChannel.EMAIL, InteractionChannel.AI_VOICE_CALL] },
-        status: { in: [InteractionStatus.READ, InteractionStatus.ANSWERED] },
-        occurredAt: { gte: period.start, lt: period.end },
-        ...(creditorId ? { wallet: { creditorId } } : {}),
-      },
+    const pagination = this.resolvePagination(pageValue, limitValue);
+    const where = {
+      accountId,
+      channel: { in: [InteractionChannel.SMS, InteractionChannel.EMAIL, InteractionChannel.AI_VOICE_CALL] },
+      status: { in: [InteractionStatus.READ, InteractionStatus.ANSWERED] },
+      occurredAt: { gte: period.start, lt: period.end },
+      ...(creditorId ? { wallet: { creditorId } } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.contractInteraction.findMany({
+      where,
       orderBy: { occurredAt: 'desc' },
-      take: 1_000,
+      skip: pagination.skip,
+      take: pagination.limit,
       select: {
         channel: true,
         status: true,
@@ -105,9 +119,11 @@ export class ReportsService {
           },
         },
       },
-    });
+      }),
+      this.prisma.contractInteraction.count({ where }),
+    ]);
 
-    return { period: this.serializePeriod(period), total: rows.length, data: rows };
+    return { period: this.serializePeriod(period), total, meta: this.serializePagination(total, pagination), data: rows };
   }
 
   private resolvePeriod(startDate?: string, endDate?: string): Period {
@@ -137,5 +153,15 @@ export class ReportsService {
 
   private serializePeriod(period: Period) {
     return { startDate: period.start.toISOString(), endDateExclusive: period.end.toISOString() };
+  }
+
+  private resolvePagination(pageValue?: string, limitValue?: string) {
+    const page = Math.max(1, Number.parseInt(pageValue ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(10, Number.parseInt(limitValue ?? '50', 10) || 50));
+    return { page, limit, skip: (page - 1) * limit };
+  }
+
+  private serializePagination(total: number, pagination: { page: number; limit: number }) {
+    return { ...pagination, totalPages: Math.max(1, Math.ceil(total / pagination.limit)) };
   }
 }
