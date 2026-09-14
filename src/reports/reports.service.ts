@@ -91,8 +91,9 @@ export class ReportsService {
       orderBy: { name: 'asc' },
       select: { id: true, name: true, creditor: { select: { id: true, name: true } } },
     });
+    const firstWallet = wallets[0];
     const creditors = creditorId
-      ? wallets.length ? [{ id: wallets[0].creditor.id, name: wallets[0].creditor.name }] : []
+      ? firstWallet ? [{ id: firstWallet.creditor.id, name: firstWallet.creditor.name }] : []
       : await this.prisma.creditor.findMany({ where: { accountId, deletedAt: null }, orderBy: { name: 'asc' }, select: { id: true, name: true } });
     return { creditors, wallets: wallets.map(({ id, name, creditor }) => ({ id, name, creditorId: creditor.id })) };
   }
