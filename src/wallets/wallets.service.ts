@@ -30,7 +30,7 @@ export interface WalletSummary {
   efficiencyRate: number;
   agreementHistoryTotal: number;
   agreementHistoryDatedCount: number;
-  agreementDailyHistory: Array<{ date: string; count: number; amount: number }>;
+  agreementDailyHistory: Array<{ date: string; count: number; amount: number; breachCount: number }>;
 }
 
 @Injectable()
@@ -456,7 +456,7 @@ export class WalletsService implements OnModuleDestroy {
   }
 
   async getWalletSummary(walletId: string): Promise<WalletSummary> {
-    const [statusTotals, serasaStatusTotals, overall, agreementDailyTotals] = await Promise.all([
+    const [statusTotals, serasaStatusTotals, overall, agreementDailyTotals, breachDailyTotals] = await Promise.all([
       this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
         SELECT "paymentStatus" AS status,
                COUNT(*)::bigint AS count,
@@ -528,6 +528,21 @@ export class WalletsService implements OnModuleDestroy {
           AND "agreementCreatedAt" < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
         GROUP BY ("agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date
         ORDER BY ("agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date
+        `),
+      this.prisma.$queryRaw<Array<{ date: string; count: bigint }>>(Prisma.sql`
+        SELECT TO_CHAR(("occurredAt" AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS date,
+               COUNT(*)::bigint AS count
+        FROM "ContractInteraction"
+        WHERE "walletId" = ${walletId}
+          AND "channel" = 'SERASA'
+          AND (
+            "payload"->>'eventType' = 'BreachedAgreementEvent'
+            OR "summary" = 'Acordo quebrado na Serasa.'
+          )
+          AND "occurredAt" >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+          AND "occurredAt" < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+        GROUP BY ("occurredAt" AT TIME ZONE 'America/Sao_Paulo')::date
+        ORDER BY ("occurredAt" AT TIME ZONE 'America/Sao_Paulo')::date
       `),
     ]);
 
@@ -554,8 +569,9 @@ export class WalletsService implements OnModuleDestroy {
     const recoveredValue = Number(result.recoveredValue);
     const eligibleValue = Number(result.eligibleValue);
     const dailyByDate = new Map(agreementDailyTotals.map((item) => [item.date, {
-      count: Number(item.count), amount: Number(item.amount),
-    }]));
+        count: Number(item.count), amount: Number(item.amount),
+      }]));
+    const breachesByDate = new Map(breachDailyTotals.map((item) => [item.date, Number(item.count)]));
     const agreementDailyHistory = Array.from({ length: 30 }, (_, index) => {
       const date = new Date();
       date.setDate(date.getDate() - (29 - index));
@@ -565,7 +581,7 @@ export class WalletsService implements OnModuleDestroy {
       const datePart = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
       const dateKey = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
       const daily = dailyByDate.get(dateKey) ?? { count: 0, amount: 0 };
-      return { date: dateKey, ...daily };
+      return { date: dateKey, ...daily, breachCount: breachesByDate.get(dateKey) ?? 0 };
     });
 
     return {
