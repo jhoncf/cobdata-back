@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { InteractionChannel, InteractionStatus, PaymentSettlementSource, PaymentSettlementStatus } from '@prisma/client';
+import { InteractionChannel, InteractionStatus, PaymentSettlementSource, PaymentSettlementStatus, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 type Period = { start: Date; end: Date };
@@ -8,24 +8,28 @@ type Period = { start: Date; end: Date };
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async serasaAgreements(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string) {
+  async serasaAgreements(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string, walletId?: string) {
     const period = this.resolvePeriod(startDate, endDate);
     const pagination = this.resolvePagination(pageValue, limitValue);
     const where = {
-      accountId, deletedAt: null, agreementReference: { not: null }, agreementCreatedAt: { gte: period.start, lt: period.end },
-      ...(creditorId ? { wallet: { creditorId } } : {}),
+      accountId,
+      deletedAt: null,
+      agreementReference: { not: null },
+      paymentStatus: PaymentStatus.PAID,
+      lastPaymentAt: { gte: period.start, lt: period.end },
+      ...(creditorId || walletId ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
     };
     const [rows, total, aggregate] = await Promise.all([
       this.prisma.contract.findMany({
       where,
-      orderBy: { agreementCreatedAt: 'desc' },
+      orderBy: { lastPaymentAt: 'desc' },
       skip: pagination.skip,
       take: pagination.limit,
       select: {
         contractNumber: true,
         debtorName: true,
         agreementReference: true,
-        agreementCreatedAt: true,
+        lastPaymentAt: true,
         agreementTotalAmount: true,
         totalInstallments: true,
         paidInstallments: true,
@@ -49,12 +53,56 @@ export class ReportsService {
     };
   }
 
-  async pixPayments(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string) {
+  async exportSerasaAgreements(accountId: string, creditorId?: string, startDate?: string, endDate?: string, walletId?: string) {
+    const period = this.resolvePeriod(startDate, endDate);
+    const rows = await this.prisma.contract.findMany({
+      where: {
+        accountId,
+        deletedAt: null,
+        agreementReference: { not: null },
+        paymentStatus: PaymentStatus.PAID,
+        lastPaymentAt: { gte: period.start, lt: period.end },
+        ...(creditorId || walletId ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
+      },
+      orderBy: { lastPaymentAt: 'desc' },
+      select: {
+        contractNumber: true,
+        debtorName: true,
+        agreementReference: true,
+        lastPaymentAt: true,
+        agreementTotalAmount: true,
+        totalInstallments: true,
+        paidInstallments: true,
+        wallet: { select: { name: true, creditor: { select: { name: true } } } },
+      },
+    });
+    const header = ['Data do pagamento', 'Credor', 'Carteira', 'Número do contrato', 'Devedor', 'Referência do acordo', 'Valor pago', 'Parcelas pagas'];
+    const values = rows.map((row) => [
+      row.lastPaymentAt?.toISOString() ?? '', row.wallet.creditor.name, row.wallet.name, row.contractNumber,
+      row.debtorName ?? '', row.agreementReference ?? '', Number(row.agreementTotalAmount ?? 0).toFixed(2).replace('.', ','),
+      `${row.paidInstallments}/${row.totalInstallments ?? 1}`,
+    ]);
+    return `\uFEFF${[header, ...values].map((line) => line.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n')}`;
+  }
+
+  async filters(accountId: string, creditorId?: string) {
+    const wallets = await this.prisma.wallet.findMany({
+      where: { accountId, deletedAt: null, ...(creditorId ? { creditorId } : {}) },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, creditor: { select: { id: true, name: true } } },
+    });
+    const creditors = creditorId
+      ? wallets.length ? [{ id: wallets[0].creditor.id, name: wallets[0].creditor.name }] : []
+      : await this.prisma.creditor.findMany({ where: { accountId, deletedAt: null }, orderBy: { name: 'asc' }, select: { id: true, name: true } });
+    return { creditors, wallets: wallets.map(({ id, name, creditor }) => ({ id, name, creditorId: creditor.id })) };
+  }
+
+  async pixPayments(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string, walletId?: string) {
     const period = this.resolvePeriod(startDate, endDate);
     const pagination = this.resolvePagination(pageValue, limitValue);
     const where = {
       accountId, source: PaymentSettlementSource.PIX, status: PaymentSettlementStatus.CONFIRMED, paidAt: { gte: period.start, lt: period.end },
-      ...(creditorId ? { contract: { wallet: { creditorId } } } : {}),
+      ...(creditorId || walletId ? { contract: { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } } : {}),
     };
     const [rows, total, aggregate] = await Promise.all([
       this.prisma.paymentSettlement.findMany({
@@ -89,7 +137,7 @@ export class ReportsService {
     };
   }
 
-  async communications(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string) {
+  async communications(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string, walletId?: string) {
     const period = this.resolvePeriod(startDate, endDate);
     const pagination = this.resolvePagination(pageValue, limitValue);
     const where = {
@@ -97,7 +145,7 @@ export class ReportsService {
       channel: { in: [InteractionChannel.SMS, InteractionChannel.EMAIL, InteractionChannel.AI_VOICE_CALL] },
       status: { in: [InteractionStatus.READ, InteractionStatus.ANSWERED] },
       occurredAt: { gte: period.start, lt: period.end },
-      ...(creditorId ? { wallet: { creditorId } } : {}),
+      ...(creditorId || walletId ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.contractInteraction.findMany({
