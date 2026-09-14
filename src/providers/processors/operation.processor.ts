@@ -253,6 +253,12 @@ export class OperationProcessor extends WorkerHost {
           lastAttemptAt: new Date(),
         },
       });
+      // The removal was rejected synchronously. Leave a visible retryable
+      // failure instead of an indefinite REMOVING projection.
+      await this.prisma.contract.updateMany({
+        where: { id: { in: items.map((i) => i.contractId) } },
+        data: { serasaStatus: 'FAILED' },
+      });
     }
   }
 

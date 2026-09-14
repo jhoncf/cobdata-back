@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { QUEUES } from '../common/constants/queues';
 import {
@@ -78,6 +79,9 @@ export interface OperationBatchJobData {
 @Injectable()
 export class OperationsService {
   private readonly logger = new Logger(OperationsService.name);
+  private static readonly REMOVAL_RECONCILIATION_INTERVAL_MINUTES = 15;
+  private static readonly REMOVAL_INITIAL_RETRY_MINUTES = 30;
+  private static readonly REMOVAL_MAX_ATTEMPTS = 5;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -505,6 +509,68 @@ export class OperationsService {
       return;
     }
     await this.createForContract(contractId, user.id, accountId, OperationAction.REMOVE);
+  }
+
+  /**
+   * Serasa confirms removals exclusively by webhook. A 202 only means that the
+   * request was accepted, so a missing webhook must not leave a debt in
+   * REMOVING forever. Retry stale requests individually with exponential
+   * backoff; after the limit, surface FAILED rather than claiming removal.
+   */
+  @Cron('*/15 * * * *', { timeZone: 'America/Sao_Paulo' })
+  async reconcileStaleSerasaRemovals(): Promise<void> {
+    const now = new Date();
+    const candidates = await this.prisma.providerOperationItem.findMany({
+      where: {
+        status: OperationItemStatus.WAITING_PROVIDER_EVENT,
+        operation: { action: OperationAction.REMOVE },
+        contract: { serasaStatus: SerasaStatus.REMOVING, deletedAt: null },
+      },
+      select: {
+        id: true,
+        operationId: true,
+        batchIndex: true,
+        attempts: true,
+        lastAttemptAt: true,
+        contractId: true,
+        operation: { select: { providerId: true } },
+      },
+      orderBy: { lastAttemptAt: 'asc' },
+      take: 100,
+    });
+
+    let retried = 0;
+    let failed = 0;
+    for (const item of candidates) {
+      const delayMinutes = OperationsService.REMOVAL_INITIAL_RETRY_MINUTES
+        * Math.min(2 ** Math.max(item.attempts - 1, 0), 16);
+      if (item.lastAttemptAt && now.getTime() - item.lastAttemptAt.getTime() < delayMinutes * 60_000) continue;
+
+      if (item.attempts >= OperationsService.REMOVAL_MAX_ATTEMPTS) {
+        await this.prisma.$transaction([
+          this.prisma.providerOperationItem.update({
+            where: { id: item.id },
+            data: { status: OperationItemStatus.FAILED, errorCode: 'REMOVAL_WEBHOOK_TIMEOUT', errorMessage: 'Serasa não confirmou a remoção após tentativas automáticas.' },
+          }),
+          this.prisma.contract.update({ where: { id: item.contractId }, data: { serasaStatus: SerasaStatus.FAILED } }),
+        ]);
+        failed += 1;
+        continue;
+      }
+
+      const claimed = await this.prisma.providerOperationItem.updateMany({
+        where: { id: item.id, status: OperationItemStatus.WAITING_PROVIDER_EVENT },
+        data: { status: OperationItemStatus.PENDING },
+      });
+      if (!claimed.count) continue;
+      await this.prisma.providerOperation.update({ where: { id: item.operationId }, data: { status: OperationStatus.PENDING } });
+      await this.operationQueue.add(
+        `reconcile-removal-${item.id}-${item.attempts + 1}`,
+        { operationId: item.operationId, batchIndex: item.batchIndex, providerId: item.operation.providerId, action: OperationAction.REMOVE },
+      );
+      retried += 1;
+    }
+    if (retried || failed) this.logger.warn(`Serasa removal reconciliation: ${retried} retried, ${failed} marked failed`);
   }
 
   /**
