@@ -30,7 +30,7 @@ export interface WalletSummary {
   efficiencyRate: number;
   agreementHistoryTotal: number;
   agreementHistoryDatedCount: number;
-  agreementDailyHistory: Array<{ date: string; count: number; amount: number; breachCount: number }>;
+  agreementDailyHistory: Array<{ date: string; count: number; amount: number; paidCount: number; breachCount: number }>;
 }
 
 @Injectable()
@@ -456,7 +456,7 @@ export class WalletsService implements OnModuleDestroy {
   }
 
   async getWalletSummary(walletId: string): Promise<WalletSummary> {
-    const [statusTotals, serasaStatusTotals, overall, agreementDailyTotals, breachDailyTotals] = await Promise.all([
+    const [statusTotals, serasaStatusTotals, overall, agreementDailyTotals, paidAgreementDailyTotals, breachDailyTotals] = await Promise.all([
       this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
         SELECT "paymentStatus" AS status,
                COUNT(*)::bigint AS count,
@@ -530,20 +530,44 @@ export class WalletsService implements OnModuleDestroy {
         ORDER BY ("agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date
         `),
       this.prisma.$queryRaw<Array<{ date: string; count: bigint }>>(Prisma.sql`
-        SELECT TO_CHAR(("occurredAt" AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS date,
+        SELECT TO_CHAR((COALESCE("lastPaymentAt", "updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS date,
                COUNT(*)::bigint AS count
-        FROM "ContractInteraction"
+        FROM "Contract"
         WHERE "walletId" = ${walletId}
-          AND "channel" = 'SERASA'
-          AND (
-            "payload"->>'eventType' = 'BreachedAgreementEvent'
-            OR "summary" = 'Acordo quebrado na Serasa.'
-          )
-          AND "occurredAt" >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
-          AND "occurredAt" < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
-        GROUP BY ("occurredAt" AT TIME ZONE 'America/Sao_Paulo')::date
-        ORDER BY ("occurredAt" AT TIME ZONE 'America/Sao_Paulo')::date
-      `),
+          AND "deletedAt" IS NULL
+          AND "status" = 'ACTIVE'
+          AND "paymentStatus" = 'PAID'
+          AND "agreementCreatedAt" IS NOT NULL
+          AND COALESCE("lastPaymentAt", "updatedAt") >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+          AND COALESCE("lastPaymentAt", "updatedAt") < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+        GROUP BY (COALESCE("lastPaymentAt", "updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
+        ORDER BY (COALESCE("lastPaymentAt", "updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
+        `),
+      this.prisma.$queryRaw<Array<{ date: string; count: bigint }>>(Prisma.sql`
+        SELECT TO_CHAR((COALESCE(breach."occurredAt", contract."updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS date,
+               COUNT(*)::bigint AS count
+        FROM "Contract" contract
+        LEFT JOIN LATERAL (
+          SELECT interaction."occurredAt"
+          FROM "ContractInteraction" interaction
+          WHERE interaction."contractId" = contract.id
+            AND interaction."channel" = 'SERASA'
+            AND (
+              interaction."payload"->>'eventType' = 'BreachedAgreementEvent'
+              OR interaction."summary" = 'Acordo quebrado na Serasa.'
+            )
+          ORDER BY interaction."occurredAt" DESC
+          LIMIT 1
+        ) breach ON TRUE
+        WHERE contract."walletId" = ${walletId}
+          AND contract."deletedAt" IS NULL
+          AND contract."status" = 'ACTIVE'
+          AND contract."paymentStatus" = 'AGREEMENT_BREACHED'
+          AND COALESCE(breach."occurredAt", contract."updatedAt") >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+          AND COALESCE(breach."occurredAt", contract."updatedAt") < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+        GROUP BY (COALESCE(breach."occurredAt", contract."updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
+        ORDER BY (COALESCE(breach."occurredAt", contract."updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
+        `),
     ]);
 
     const contractsByPaymentStatus: Record<string, number> = {};
@@ -572,6 +596,7 @@ export class WalletsService implements OnModuleDestroy {
         count: Number(item.count), amount: Number(item.amount),
       }]));
     const breachesByDate = new Map(breachDailyTotals.map((item) => [item.date, Number(item.count)]));
+    const paidByDate = new Map(paidAgreementDailyTotals.map((item) => [item.date, Number(item.count)]));
     const agreementDailyHistory = Array.from({ length: 30 }, (_, index) => {
       const date = new Date();
       date.setDate(date.getDate() - (29 - index));
@@ -581,7 +606,12 @@ export class WalletsService implements OnModuleDestroy {
       const datePart = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
       const dateKey = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
       const daily = dailyByDate.get(dateKey) ?? { count: 0, amount: 0 };
-      return { date: dateKey, ...daily, breachCount: breachesByDate.get(dateKey) ?? 0 };
+      return {
+        date: dateKey,
+        ...daily,
+        paidCount: paidByDate.get(dateKey) ?? 0,
+        breachCount: breachesByDate.get(dateKey) ?? 0,
+      };
     });
 
     return {
