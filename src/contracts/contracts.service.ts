@@ -361,14 +361,15 @@ export class ContractsService {
       throw new NotFoundException('Contract not found');
     }
 
-    // Mask document for VIEWER
+      // Creditor portal users are restricted by creditorId and may view the
+      // full CPF for their own contracts. Other VIEWER roles stay masked.
     const { tags, ...rest } = contract;
     const result: any = {
       ...rest,
       tags: tags.map((t) => t.tag),
     };
 
-    if (userRole === 'VIEWER') {
+      if (userRole === 'VIEWER' && !creditorId) {
       result.debtorDocument = this.maskDocument(rest.debtorDocument);
     }
 
@@ -509,9 +510,12 @@ export class ContractsService {
     };
     if (portalCreditorId) where.wallet = { creditorId: portalCreditorId };
 
-    // The creditor portal is intentionally a lookup tool, not a browsable
-    // portfolio. Require a complete CPF before returning any contract data.
-    if (portalCreditorId && (debtorDocument?.replace(/\D/g, '').length !== 11)) {
+      // The creditor portal is intentionally a lookup tool, not a browsable
+      // portfolio. It accepts either a complete CPF or a meaningful contract
+      // identifier, always constrained to the authenticated creditor.
+      const portalDocument = debtorDocument?.replace(/\D/g, '') ?? '';
+      const portalSearch = search?.trim() ?? '';
+      if (portalCreditorId && portalDocument.length !== 11 && portalSearch.length < 3) {
       return {
         data: [],
         meta: { total: 0, page, limit, totalPages: 0 },
@@ -667,7 +671,7 @@ export class ContractsService {
         ...rest,
         tags: contractTags.map((t) => t.tag),
       };
-      if (userRole === 'VIEWER') {
+        if (userRole === 'VIEWER' && !portalCreditorId) {
         mapped.debtorDocument = this.maskDocument(rest.debtorDocument);
       }
       return mapped;
