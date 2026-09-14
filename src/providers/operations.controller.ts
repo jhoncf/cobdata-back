@@ -19,6 +19,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit, CreditorPortalAccess } from '../common/decorators';
 import { AuthenticatedUser } from '../common/interfaces';
+import { InteractionChannel } from '@prisma/client';
 
 @ApiTags('Operations')
 @ApiBearerAuth('bearer')
@@ -99,6 +100,11 @@ export class OperationsController {
       user.id,
       user.accountId,
       user.creditorId,
+      user.creditorId ? {
+        channel: InteractionChannel.WHATSAPP,
+        provider: 'CREDITOR_PORTAL',
+        summary: 'Contrato cancelado pelo credor via Portal CobCom.',
+      } : undefined,
     );
   }
 
