@@ -515,7 +515,8 @@ export class ContractsService {
       // identifier, always constrained to the authenticated creditor.
       const portalDocument = debtorDocument?.replace(/\D/g, '') ?? '';
       const portalSearch = search?.trim() ?? '';
-      if (portalCreditorId && portalDocument.length !== 11 && portalSearch.length < 3) {
+      const isCancelledPortalList = status === ContractStatus.CANCELLED;
+      if (portalCreditorId && !isCancelledPortalList && portalDocument.length !== 11 && portalSearch.length < 3) {
       return {
         data: [],
         meta: { total: 0, page, limit, totalPages: 0 },

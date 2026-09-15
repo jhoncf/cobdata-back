@@ -30,6 +30,7 @@ export interface WalletSummary {
   efficiencyRate: number;
   agreementHistoryTotal: number;
   agreementHistoryDatedCount: number;
+  paidAgreementsLast30Days: { count: number; amount: number };
   agreementDailyHistory: Array<{ date: string; count: number; amount: number; paidCount: number; breachCount: number }>;
 }
 
@@ -456,7 +457,7 @@ export class WalletsService implements OnModuleDestroy {
   }
 
   async getWalletSummary(walletId: string): Promise<WalletSummary> {
-    const [statusTotals, serasaStatusTotals, overall, agreementDailyTotals, paidAgreementDailyTotals, breachDailyTotals] = await Promise.all([
+    const [statusTotals, serasaStatusTotals, overall, agreementDailyTotals, paidAgreementDailyTotals, paidAgreementReportTotals, breachDailyTotals] = await Promise.all([
       this.prisma.$queryRaw<Array<{ status: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
         SELECT "paymentStatus" AS status,
                COUNT(*)::bigint AS count,
@@ -545,6 +546,19 @@ export class WalletsService implements OnModuleDestroy {
         GROUP BY (COALESCE("lastPaymentAt", "updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
         ORDER BY (COALESCE("lastPaymentAt", "updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
         `),
+      this.prisma.$queryRaw<Array<{ count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
+        SELECT COUNT(*)::bigint AS count,
+               COALESCE(SUM("totalPaidAmount"), 0) AS amount
+        FROM "Contract"
+        WHERE "walletId" = ${walletId}
+          AND "deletedAt" IS NULL
+          AND "agreementReference" IS NOT NULL
+          AND "paymentStatus" = 'PAID'
+          AND "lastPaymentAt" >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+          AND "lastPaymentAt" < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+          AND "paidInstallments" >= GREATEST(COALESCE("totalInstallments", 1), 1)
+          AND COALESCE("totalPaidAmount", 0) >= COALESCE("agreementTotalAmount", 0) - 0.01
+        `),
       this.prisma.$queryRaw<Array<{ date: string; count: bigint }>>(Prisma.sql`
         SELECT TO_CHAR((COALESCE(breach."occurredAt", contract."updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS date,
                COUNT(*)::bigint AS count
@@ -590,6 +604,7 @@ export class WalletsService implements OnModuleDestroy {
       commissionForecastValue: new Prisma.Decimal(0), commissionRealizedValue: new Prisma.Decimal(0), discountsConcededValue: new Prisma.Decimal(0), eligibleValue: new Prisma.Decimal(0),
       agreementHistoryTotal: BigInt(0), agreementHistoryDatedCount: BigInt(0),
     };
+    const paidAgreementsLast30Days = paidAgreementReportTotals[0] ?? { count: BigInt(0), amount: new Prisma.Decimal(0) };
     const totalContracts = Number(result.totalContracts);
     const totalValue = Number(result.totalValue);
     const recoveredValue = Number(result.recoveredValue);
@@ -632,6 +647,10 @@ export class WalletsService implements OnModuleDestroy {
       efficiencyRate: eligibleValue > 0 ? Math.round((recoveredValue / eligibleValue) * 10_000) / 100 : 0,
       agreementHistoryTotal: Number(result.agreementHistoryTotal),
       agreementHistoryDatedCount: Number(result.agreementHistoryDatedCount),
+      paidAgreementsLast30Days: {
+        count: Number(paidAgreementsLast30Days.count),
+        amount: Number(paidAgreementsLast30Days.amount),
+      },
       agreementDailyHistory,
     };
   }
