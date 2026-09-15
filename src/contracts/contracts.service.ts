@@ -659,7 +659,9 @@ export class ContractsService {
         take: limit,
         orderBy: sortBy
           ? [{ [sortBy]: sortDirection ?? 'asc' }, { createdAt: 'desc' }]
-          : { createdAt: 'desc' },
+          : isCancelledPortalList
+            ? [{ cancelledAt: 'desc' }, { createdAt: 'desc' }]
+            : { createdAt: 'desc' },
         include: { tags: { select: { tag: true } } },
       }),
       includeTotal ? this.prisma.contract.count({ where }) : Promise.resolve(0),
