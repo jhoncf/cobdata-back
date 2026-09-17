@@ -80,6 +80,11 @@ export class UpdateContractDto {
   @MaxLength(200)
   debtorName?: string;
 
+  @ApiPropertyOptional({ description: 'Debtor birth date (ISO 8601)', example: '1990-05-20' })
+  @IsOptional()
+  @IsDateString({}, { message: 'debtorBirthDate must be a valid ISO 8601 date string' })
+  debtorBirthDate?: string;
+
   @ApiPropertyOptional({ description: 'Product name (max 200 chars)', example: 'Plano Internet 100MB', maxLength: 200 })
   @IsOptional()
   @IsString()

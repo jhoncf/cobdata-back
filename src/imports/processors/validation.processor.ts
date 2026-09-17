@@ -288,6 +288,14 @@ export class ValidationProcessor extends WorkerHost {
       });
     }
 
+    const birthDateStr = line['debtorBirthDate'] || '';
+    if (birthDateStr) {
+      const birthDate = new Date(birthDateStr);
+      if (isNaN(birthDate.getTime()) || birthDate > new Date()) {
+        errors.push({ lineNumber, errorCode: 'INVALID_FORMAT', fieldName: 'debtorBirthDate', message: 'Data de nascimento em formato inválido', fieldValue: birthDateStr });
+      }
+    }
+
     // Validate originalValue (0.01 to 999999999.99)
     const originalValueStr = line['originalValue'] || '';
     const originalValue = parseFloat(originalValueStr);

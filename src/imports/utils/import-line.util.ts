@@ -7,6 +7,9 @@ const HEADER_FIELD_MAP: Record<string, string> = {
   'num_adm': 'contractNumber',
   'cliente': 'debtorName',
   'nome_cliente': 'debtorName',
+  'data_nascimento': 'debtorBirthDate',
+  'dt_nascimento': 'debtorBirthDate',
+  'nascimento': 'debtorBirthDate',
   'documento': 'debtorDocument',
   'mes_contrato': 'occurrenceDate',
   // Layout used by the production portfolio export.  Despite its name, the

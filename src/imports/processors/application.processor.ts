@@ -31,6 +31,7 @@ function valuesAreDifferent(
     updatedValue: Decimal;
     debtOrigin: string | null;
     debtorName: string;
+    debtorBirthDate: Date | null;
     dueDate: Date | null;
     productName: string | null;
     debtorStreet: string | null;
@@ -51,6 +52,7 @@ function valuesAreDifferent(
     updatedValue: number;
     debtOrigin: string | null;
     debtorName: string;
+    debtorBirthDate: Date | null;
     dueDate: Date | null;
     productName: string | null;
     debtorStreet: string | null;
@@ -80,7 +82,7 @@ function valuesAreDifferent(
 
   const sameDate = (left: Date | null, right: Date | null) =>
     (left?.toISOString().split('T')[0] ?? null) === (right?.toISOString().split('T')[0] ?? null);
-  if (!sameDate(existing.dueDate, incoming.dueDate) || !sameDate(existing.cancelledAt, incoming.cancelledAt)) return true;
+    if (!sameDate(existing.dueDate, incoming.dueDate) || !sameDate(existing.cancelledAt, incoming.cancelledAt) || !sameDate(existing.debtorBirthDate, incoming.debtorBirthDate)) return true;
 
   for (const field of [
     'debtorName', 'productName', 'debtorStreet', 'debtorAddressNumber',
@@ -190,6 +192,7 @@ export class ApplicationProcessor extends WorkerHost {
           // Extract mapped fields
           const debtorDoc = (line['debtorDocument'] || '').replace(/\D/g, '');
           const debtorName = line['debtorName']?.trim() || '';
+          const debtorBirthDate = ApplicationProcessor.toValidDate(line['debtorBirthDate']);
           const contractNumber = line['contractNumber'] || '';
           const debtType = (line['debtType'] || '').toUpperCase();
           const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']);
@@ -256,6 +259,7 @@ export class ApplicationProcessor extends WorkerHost {
               updatedValue: true,
               debtOrigin: true,
               debtorName: true,
+              debtorBirthDate: true,
               dueDate: true,
               productName: true,
               debtorStreet: true,
@@ -280,6 +284,7 @@ export class ApplicationProcessor extends WorkerHost {
                 id: true, walletId: true, debtType: true, occurrenceDate: true,
                 originalValue: true, updatedValue: true, debtOrigin: true,
                 debtorName: true, dueDate: true, productName: true, debtorStreet: true,
+                debtorBirthDate: true,
                 debtorAddressNumber: true, debtorAddressComplement: true,
                 debtorNeighborhood: true, debtorCity: true, debtorState: true,
                 debtorZipCode: true, debtorPhone: true, debtorEmail: true,
@@ -302,6 +307,7 @@ export class ApplicationProcessor extends WorkerHost {
                 debtorDocument: debtorDoc,
                 debtorDocumentHash,
                 debtorName,
+                debtorBirthDate,
                 contractNumber,
                 debtType: debtType as any,
                 occurrenceDate,
@@ -362,6 +368,7 @@ export class ApplicationProcessor extends WorkerHost {
                   updatedValue: existingContract.updatedValue,
                 debtOrigin: existingContract.debtOrigin,
                 debtorName: existingContract.debtorName,
+                debtorBirthDate: existingContract.debtorBirthDate,
                 dueDate: existingContract.dueDate,
                 productName: existingContract.productName,
                 debtorStreet: existingContract.debtorStreet,
@@ -384,6 +391,7 @@ export class ApplicationProcessor extends WorkerHost {
                 debtorDocument: debtorDoc,
                 debtorDocumentHash,
                 debtorName,
+                debtorBirthDate,
                 contractNumber,
                 debtType: debtType as any,
                 occurrenceDate,
@@ -448,7 +456,8 @@ export class ApplicationProcessor extends WorkerHost {
               walletId,
               debtorDocument: debtorDoc,
               debtorDocumentHash,
-              debtorName,
+                debtorName,
+                debtorBirthDate,
               contractNumber,
               debtType: debtType as any,
               occurrenceDate,

@@ -182,6 +182,7 @@ export class ContractsService {
         const updateData: any = {
           debtorDocument: dto.debtorDocument,
           ...(dto.debtorName !== undefined ? { debtorName: dto.debtorName } : {}),
+          ...(dto.debtorBirthDate !== undefined ? { debtorBirthDate: new Date(dto.debtorBirthDate) } : {}),
           debtorDocumentHash,
           contractNumber: dto.contractNumber,
           debtType: dto.debtType,
@@ -245,6 +246,7 @@ export class ContractsService {
         walletId: dto.walletId,
         debtorDocument: dto.debtorDocument,
         debtorName: dto.debtorName ?? '',
+        debtorBirthDate: dto.debtorBirthDate ? new Date(dto.debtorBirthDate) : null,
         debtorDocumentHash,
         contractNumber: dto.contractNumber,
         debtType: dto.debtType,
@@ -831,6 +833,9 @@ export class ContractsService {
     }
     if (dto.debtorName !== undefined) {
       updateData.debtorName = dto.debtorName;
+    }
+    if (dto.debtorBirthDate !== undefined) {
+      updateData.debtorBirthDate = new Date(dto.debtorBirthDate);
     }
     if (dto.productName !== undefined) {
       updateData.productName = dto.productName;

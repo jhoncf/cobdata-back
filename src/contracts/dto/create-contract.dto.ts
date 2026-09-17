@@ -36,6 +36,11 @@ export class CreateContractDto {
   @MaxLength(200)
   debtorName?: string;
 
+  @ApiPropertyOptional({ description: 'Debtor birth date (ISO 8601)', example: '1990-05-20' })
+  @IsOptional()
+  @IsDateString({}, { message: 'debtorBirthDate must be a valid ISO 8601 date string' })
+  debtorBirthDate?: string;
+
   @ApiProperty({ description: 'Contract number (max 100 chars)', example: 'CONTR-2024-001', maxLength: 100 })
   @IsString()
   @MaxLength(100)
