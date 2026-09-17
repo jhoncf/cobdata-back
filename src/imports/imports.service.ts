@@ -13,12 +13,21 @@ import { StorageService } from '../common/storage/storage.service';
 import { QUEUES } from '../common/constants/queues';
 import { randomUUID } from 'crypto';
 import * as XLSX from 'xlsx';
+import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { ConfigService } from '@nestjs/config';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_EXTENSIONS = ['.csv', '.xlsx'];
 // A single balance column may represent both original and current debt value.
 // The line normalizer fills updatedValue from originalValue in that scenario.
 const REQUIRED_MAPPING_FIELDS = ['debtorDocument', 'contractNumber', 'debtType', 'occurrenceDate', 'originalValue'];
+const IMPORT_TARGET_FIELDS = [
+  'debtorDocument', 'contractNumber', 'debtType', 'occurrenceDate',
+  'originalValue', 'updatedValue', 'debtorName', 'debtorBirthDate', 'dueDate',
+  'debtOrigin', 'productName', 'debtorStreet', 'debtorAddressNumber',
+  'debtorAddressComplement', 'debtorNeighborhood', 'debtorCity', 'debtorState',
+  'debtorZipCode', 'debtorPhone', 'debtorEmail', 'cancelledAt',
+];
 
 /** Statuses that allow confirmation */
 const CONFIRMABLE_STATUSES = ['VALIDATED', 'VALIDATED_WITH_ERRORS'];
@@ -46,15 +55,56 @@ export interface UploadImportParams {
 @Injectable()
 export class ImportsService {
   private readonly logger = new Logger(ImportsService.name);
+  private readonly bedrock: BedrockRuntimeClient;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
+    private readonly config: ConfigService,
     @InjectQueue(QUEUES.IMPORT_VALIDATION)
     private readonly validationQueue: Queue,
     @InjectQueue(QUEUES.IMPORT_APPLICATION)
     private readonly applicationQueue: Queue,
-  ) {}
+  ) {
+    this.bedrock = new BedrockRuntimeClient({ region: this.config.get<string>('BEDROCK_REGION') });
+  }
+
+  async suggestMapping(headers: string[], sampleFormats: Record<string, string>) {
+    const safeHeaders = headers.map((header) => String(header).trim()).filter(Boolean).slice(0, 100);
+    const safeFormats = Object.fromEntries(safeHeaders.map((header) => [header, String(sampleFormats?.[header] ?? '').slice(0, 80)]));
+    if (!safeHeaders.length) return { mapping: {}, provider: 'fallback' as const };
+
+    try {
+      const command = new ConverseCommand({
+        modelId: this.config.getOrThrow<string>('BEDROCK_CHAT_MODEL_ID'),
+        messages: [{
+          role: 'user',
+          content: [{ text: `Você mapeia colunas de planilhas de cobrança para campos CRM. Retorne APENAS JSON no formato {"mapping":{"campoCRM":"cabecalhoExato"}}. Use somente campos CRM desta lista: ${JSON.stringify(IMPORT_TARGET_FIELDS)}. Use somente cabeçalhos desta lista: ${JSON.stringify(safeHeaders)}. Uma coluna não pode ser usada duas vezes. Dados anonimizados de formato: ${JSON.stringify(safeFormats)}. Não invente campos; omita quando não houver segurança.` }],
+        }],
+        inferenceConfig: { maxTokens: 600, temperature: 0 },
+      });
+      const output = await this.bedrock.send(command);
+      const text = output.output?.message?.content?.map((part) => part.text ?? '').join('') ?? '';
+      const raw = JSON.parse(text.match(/\{.*\}/s)?.[0] ?? '{}').mapping;
+      const mapping = this.sanitizeSuggestedMapping(raw, safeHeaders);
+      return { mapping, provider: 'bedrock' as const };
+    } catch (error) {
+      this.logger.warn(`Bedrock import mapping suggestion unavailable: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return { mapping: {}, provider: 'fallback' as const };
+    }
+  }
+
+  private sanitizeSuggestedMapping(raw: unknown, headers: string[]): Record<string, string> {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const mapping: Record<string, string> = {};
+    const usedHeaders = new Set<string>();
+    for (const [target, header] of Object.entries(raw as Record<string, unknown>)) {
+      if (!IMPORT_TARGET_FIELDS.includes(target) || typeof header !== 'string' || !headers.includes(header) || usedHeaders.has(header)) continue;
+      mapping[target] = header;
+      usedHeaders.add(header);
+    }
+    return mapping;
+  }
 
   async upload(params: UploadImportParams) {
     const { file, walletId, columnMapping, userId, accountId } = params;

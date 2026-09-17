@@ -16,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { ImportsService } from './imports.service';
 import { UploadImportDto } from './dto/upload-import.dto';
+import { SuggestImportMappingDto } from './dto/suggest-import-mapping.dto';
 import { ListImportsQueryDto } from './dto/list-imports-query.dto';
 import { ListErrorsQueryDto } from './dto/list-errors-query.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,6 +29,14 @@ import { AuthenticatedUser } from '../common/interfaces';
 @Controller('imports')
 export class ImportsController {
   constructor(private readonly importsService: ImportsService) {}
+
+  @Post('suggest-mapping')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Suggest import mapping with Bedrock', description: 'Analyzes only column names and anonymized formats; spreadsheet values are not sent to the model.' })
+  async suggestMapping(@Body() dto: SuggestImportMappingDto) {
+    return this.importsService.suggestMapping(dto.headers, dto.sampleFormats);
+  }
 
   @Post()
   @Roles('ADMIN', 'OPERATIONAL')
