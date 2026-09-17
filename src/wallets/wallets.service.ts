@@ -77,6 +77,7 @@ export class WalletsService implements OnModuleDestroy {
         accountId,
         creditorId,
         name: dto.name,
+        serasaWalletExternalId: dto.serasaWalletExternalId || null,
         status: 'ACTIVE',
         cobcomDiscountPercent: dto.cobcomDiscountPercent ?? 0,
         offerFirstInstallmentDays: dto.offerFirstInstallmentDays ?? 5,
@@ -253,6 +254,7 @@ export class WalletsService implements OnModuleDestroy {
 
     const data: any = {};
     if (dto.name !== undefined) data.name = dto.name;
+    if (dto.serasaWalletExternalId !== undefined) data.serasaWalletExternalId = dto.serasaWalletExternalId || null;
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.cobcomDiscountPercent !== undefined) data.cobcomDiscountPercent = dto.cobcomDiscountPercent;
     if (dto.offerFirstInstallmentDays !== undefined) data.offerFirstInstallmentDays = dto.offerFirstInstallmentDays;

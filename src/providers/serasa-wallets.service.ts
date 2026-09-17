@@ -47,7 +47,7 @@ export class SerasaWalletsService {
 
     const provider = await this.prisma.provider.findFirst({ where: { accountId, type: ProviderType.SERASA_LNOP } });
     if (!serasaWalletId) {
-      await this.prisma.wallet.update({ where: { id: walletId }, data: { serasaWalletId: null } });
+      await this.prisma.wallet.update({ where: { id: walletId }, data: { serasaWalletId: null, serasaWalletExternalId: null } });
       if (provider) await this.prisma.walletMapping.deleteMany({ where: { providerId: provider.id, walletId } });
       return;
     }
@@ -56,7 +56,7 @@ export class SerasaWalletsService {
     if (!provider) throw new ConflictException('Canal Serasa não está configurado');
 
     await this.prisma.$transaction([
-      this.prisma.wallet.update({ where: { id: walletId }, data: { serasaWalletId } }),
+      this.prisma.wallet.update({ where: { id: walletId }, data: { serasaWalletId, serasaWalletExternalId: serasaWallet.externalWalletId } }),
       this.prisma.walletMapping.upsert({
         where: { providerId_walletId: { providerId: provider.id, walletId } },
         create: { providerId: provider.id, walletId, externalWalletId: serasaWallet.externalWalletId },

@@ -11,6 +11,13 @@ export class UpdateWalletDto {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   name?: string;
 
+  @ApiPropertyOptional({ description: 'Target wallet ID in Serasa. Leave empty to use the Serasa PRE_CALCULADA default wallet.', example: 'wallet-serasa-123', nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  serasaWalletExternalId?: string;
+
   @ApiPropertyOptional({ description: 'Wallet status', enum: ['ACTIVE', 'INACTIVE'], example: 'ACTIVE' })
   @IsOptional()
   @IsIn(['ACTIVE', 'INACTIVE'])

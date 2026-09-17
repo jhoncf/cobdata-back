@@ -72,7 +72,7 @@ export class OperationProcessor extends WorkerHost {
               offerMaxInstallments: true,
               debtOrigin: true,
               debtId: true,
-              wallet: { select: { creditor: { select: { name: true, tradeName: true, cnpj: true } } } },
+              wallet: { select: { serasaWalletExternalId: true, creditor: { select: { name: true, tradeName: true, cnpj: true } } } },
             },
           },
         },
@@ -129,7 +129,9 @@ export class OperationProcessor extends WorkerHost {
         operationItemId: item.id,
         document: item.contract.debtorDocument,
         contractNumber: item.contract.contractNumber,
-        wallet: 'PRE_CALCULADA',
+        // A carteira é configurada na própria carteira CRM. Sem um ID
+        // específico, seguimos o padrão oficial da API para securitizadora.
+        wallet: item.contract.wallet.serasaWalletExternalId || 'PRE_CALCULADA',
         // In the Limpa Nome detail screen this field is displayed as
         // "Produto / Serviço". Keep the normalized type in the CRM, while
         // sending an explicit consumer-facing origin to Serasa.

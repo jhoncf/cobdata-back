@@ -360,6 +360,9 @@ model Wallet {
   accountId                 String
   creditorId                String
   serasaWalletId            String?
+  /// Optional identifier of the target wallet in Serasa. When unset, debt
+  /// submissions use the Serasa API's PRE_CALCULADA default wallet.
+  serasaWalletExternalId    String?
   isApiDefault              Boolean      @default(false)
   cobcomDiscountPercent     Decimal      @default(0) @db.Decimal(5, 2)
   offerFirstInstallmentDays Int          @default(5)

@@ -10,6 +10,13 @@ export class CreateWalletDto {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   name!: string;
 
+  @ApiPropertyOptional({ description: 'Target wallet ID in Serasa. When omitted, uses Serasa PRE_CALCULADA default wallet.', example: 'wallet-serasa-123' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  serasaWalletExternalId?: string;
+
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) @Max(100)
   cobcomDiscountPercent?: number;
 
