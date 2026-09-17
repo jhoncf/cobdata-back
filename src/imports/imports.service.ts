@@ -16,6 +16,7 @@ import * as XLSX from 'xlsx';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_EXTENSIONS = ['.csv', '.xlsx'];
+const REQUIRED_MAPPING_FIELDS = ['debtorDocument', 'contractNumber', 'debtType', 'occurrenceDate', 'originalValue', 'updatedValue'];
 
 /** Statuses that allow confirmation */
 const CONFIRMABLE_STATUSES = ['VALIDATED', 'VALIDATED_WITH_ERRORS'];
@@ -73,6 +74,16 @@ export class ImportsService {
     if (!ALLOWED_EXTENSIONS.includes(extension)) {
       throw new UnprocessableEntityException(
         'Formato de arquivo não aceito. Use .csv ou .xlsx',
+      );
+    }
+
+    // Reject an incomplete mapping before uploading or scheduling a batch.
+    // Mappings may arrive as header -> CRM field or in the legacy reverse form.
+    const mappedFields = new Set([...Object.keys(columnMapping), ...Object.values(columnMapping)]);
+    const missingFields = REQUIRED_MAPPING_FIELDS.filter((field) => !mappedFields.has(field));
+    if (missingFields.length > 0) {
+      throw new UnprocessableEntityException(
+        `Mapeie os campos obrigatórios antes de enviar: ${missingFields.join(', ')}`,
       );
     }
 
