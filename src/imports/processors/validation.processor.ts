@@ -10,9 +10,6 @@ import * as XLSX from 'xlsx';
 import { isValidCpf, isValidCnpj } from '../../common/utils';
 import { normalizeColumnMapping, normalizeImportLine } from '../utils/import-line.util';
 
-/** Personal data fields that should be masked in error reports */
-const PII_FIELDS = ['debtorDocument', 'cpf', 'cnpj', 'documento'];
-
 /** Required contract fields */
 const REQUIRED_FIELDS = [
   'debtorDocument',
@@ -141,9 +138,9 @@ export class ValidationProcessor extends WorkerHost {
             errorCode: err.errorCode,
             fieldName: err.fieldName,
             message: err.message,
-            fieldValue: err.fieldValue
-              ? this.maskFieldValue(err.fieldName, err.fieldValue)
-              : null,
+            // A tela de importação é acessível somente a usuários autorizados do CRM.
+            // Mostrar o valor integral permite corrigir a linha de origem sem ambiguidade.
+            fieldValue: err.fieldValue || null,
           })),
         });
       }
@@ -428,19 +425,6 @@ export class ValidationProcessor extends WorkerHost {
     }
     result.push(current);
     return result;
-  }
-
-  /**
-   * Mask field value for PII fields (show only last 4 characters).
-   */
-  private maskFieldValue(fieldName: string, value: string): string {
-    const isPii = PII_FIELDS.some(
-      (f) => fieldName.toLowerCase().includes(f.toLowerCase()),
-    );
-    if (isPii && value.length > 4) {
-      return '****' + value.slice(-4);
-    }
-    return value;
   }
 
   private async streamToBuffer(stream: Readable): Promise<Buffer> {

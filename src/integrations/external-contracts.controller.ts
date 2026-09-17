@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { ApiExcludeEndpoint, ApiHeader, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiHeader, ApiOperation, ApiQuery, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { Public } from '../common/decorators';
 import { ApiKeyGuard } from './api-key.guard';
 import { ApiKeyScopes } from './api-key-scopes.decorator';
@@ -19,9 +19,11 @@ export class ExternalContractsController {
   constructor(private readonly contracts: ExternalContractsService) {}
 
   @Get()
-  @ApiExcludeEndpoint()
   @ApiKeyScopes('CONTRACTS_READ')
   @ApiOperation({ summary: 'Consultar contratos pendentes por CPF/CNPJ', description: 'Usa a mesma regra de elegibilidade da página pública: contrato ativo, não pago, carteira ativa e valor atualizado positivo.' })
+  @ApiQuery({ name: 'debtorDocument', required: true, example: '39790216882', description: 'CPF ou CNPJ do devedor, com ou sem pontuação.' })
+  @ApiQuery({ name: 'contractNumber', required: false, example: 'CTR-2026-01251', description: 'Opcional: restringe o retorno a um contrato específico.' })
+  @ApiQuery({ name: 'creditorId', required: false, example: 'uuid-do-credor', description: 'Opcional e aplicável somente a chaves com acesso a todos os credores.' })
   @ApiResponse({ status: 200, description: 'Contratos pendentes e elegíveis para cobrança.' })
   list(@Query() query: ExternalContractQueryDto, @Req() req: any) {
     return this.contracts.list(req.integration.accountId, req.integration.accessAllCreditors ? undefined : req.integration.creditorId, query);
