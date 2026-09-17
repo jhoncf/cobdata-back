@@ -345,6 +345,7 @@ export class ApplicationProcessor extends WorkerHost {
               updatedValue,
               debtOrigin,
               debtorName,
+              debtorBirthDate,
               dueDate,
               productName,
               debtorStreet,
