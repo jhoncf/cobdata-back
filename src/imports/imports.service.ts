@@ -16,7 +16,9 @@ import * as XLSX from 'xlsx';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_EXTENSIONS = ['.csv', '.xlsx'];
-const REQUIRED_MAPPING_FIELDS = ['debtorDocument', 'contractNumber', 'debtType', 'occurrenceDate', 'originalValue', 'updatedValue'];
+// A single balance column may represent both original and current debt value.
+// The line normalizer fills updatedValue from originalValue in that scenario.
+const REQUIRED_MAPPING_FIELDS = ['debtorDocument', 'contractNumber', 'debtType', 'occurrenceDate', 'originalValue'];
 
 /** Statuses that allow confirmation */
 const CONFIRMABLE_STATUSES = ['VALIDATED', 'VALIDATED_WITH_ERRORS'];

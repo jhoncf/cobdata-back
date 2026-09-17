@@ -17,7 +17,6 @@ const REQUIRED_FIELDS = [
   'debtType',
   'occurrenceDate',
   'originalValue',
-  'updatedValue',
 ];
 
 const VALID_DEBT_TYPES = [

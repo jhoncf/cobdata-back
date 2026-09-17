@@ -141,6 +141,13 @@ export function normalizeImportLine(line: ImportLineData): ImportLineData {
     if (value) normalized[field] = normalizeCurrencyValue(value);
   }
 
+  // A creditor export often has only one balance. In that case it is both the
+  // imported original value and the current payable amount; do not reject a
+  // valid file solely because it lacks a duplicate "updated value" column.
+  if (!normalized.updatedValue?.trim() && normalized.originalValue?.trim()) {
+    normalized.updatedValue = normalized.originalValue;
+  }
+
   // Some channel templates provide only a due date. Use it as the occurrence
   // reference so a valid contract can still be created and retain the original
   // due date separately.
