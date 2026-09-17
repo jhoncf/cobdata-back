@@ -26,7 +26,7 @@ export class IntegrationsController {
   create(@Body() dto: CreateApiKeyDto, @CurrentUser() user: AuthenticatedUser) { return this.keys.create(user.accountId, dto); }
 
   @Patch(':id/scopes')
-  @ApiOperation({ summary: 'Alterar permissões de uma chave de integração', description: 'O token e o credor autorizado não são alterados.' })
+  @ApiOperation({ summary: 'Alterar permissões e escopo de uma chave de integração', description: 'O token não é alterado. A chave pode ser restrita a um credor ou liberada para todos os credores da conta.' })
   updateScopes(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateApiKeyScopesDto, @CurrentUser() user: AuthenticatedUser) { return this.keys.updateScopes(id, user.accountId, dto); }
 
   @Delete(':id')

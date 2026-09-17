@@ -53,9 +53,18 @@ export class IntegrationKeysService {
   async updateScopes(id: string, accountId: string, dto: UpdateApiKeyScopesDto) {
     const key = await this.prisma.apiKey.findFirst({ where: { id, accountId, revokedAt: null } });
     if (!key) throw new NotFoundException('Chave de integração não encontrada ou revogada.');
+    const accessAllCreditors = dto.accessAllCreditors ?? key.accessAllCreditors;
+    const creditorId = accessAllCreditors ? null : (dto.creditorId ?? key.creditorId);
+    if (!accessAllCreditors) {
+      const creditor = await this.prisma.creditor.findFirst({
+        where: { id: creditorId ?? undefined, accountId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!creditor) throw new NotFoundException('Selecione um credor válido para restringir a chave.');
+    }
     return this.prisma.apiKey.update({
       where: { id },
-      data: { scopes: dto.scopes as ApiKeyScope[] },
+      data: { scopes: dto.scopes as ApiKeyScope[], accessAllCreditors, creditorId },
       select: { id: true, name: true, tokenPrefix: true, scopes: true, accessAllCreditors: true, lastUsedAt: true, revokedAt: true, createdAt: true, creditor: { select: { id: true, name: true, cnpj: true } } },
     });
   }
