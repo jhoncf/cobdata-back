@@ -74,8 +74,14 @@ export class LigueLeadService {
 
   async upsertAgent(walletId: string, accountId: string, dto: UpsertLigueLeadAgentDto, scopes?: string[]) {
     await this.wallet(walletId, accountId, scopes);
-    const payload: Record<string, unknown> = { name: dto.name, prompt: dto.prompt, greetings: dto.greetings, engine: { version: dto.modelVersion, voice_id: dto.voiceId } };
     const existing = await this.prisma.ligueLeadWalletAgent.findUnique({ where: { walletId } });
+    const payload: Record<string, unknown> = {
+      name: dto.name,
+      prompt: dto.prompt,
+      greetings: dto.greetings,
+      engine: { version: dto.modelVersion, voice_id: dto.voiceId },
+      ...(existing?.actionId ? { action_id: existing.actionId } : {}),
+    };
     const remote = await this.request(existing ? `/v1/voice-agent/${existing.externalId}` : '/v1/voice-agent', { method: existing ? 'PUT' : 'POST', body: JSON.stringify(payload) });
     const externalId = remote?.data?.id ?? remote?.id ?? existing?.externalId;
     if (!externalId) throw new BadGatewayException('A LigueLead não retornou o identificador do agente');
