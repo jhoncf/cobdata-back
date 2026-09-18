@@ -83,7 +83,7 @@ export class LigueLeadService {
   }
 
   private async eligibleContracts(walletId: string, accountId: string, ids: string[]) {
-    const contracts = await this.prisma.contract.findMany({ where: { id: { in: ids }, walletId, accountId, deletedAt: null, paymentStatus: { not: 'PAID' }, status: 'ACTIVE', AND: [{ debtorPhone: { not: null } }, { debtorPhone: { not: '' } }] }, select: { id: true, contractNumber: true, debtorName: true, debtorDocument: true, debtorPhone: true, originalValue: true, updatedValue: true } });
+    const contracts = await this.prisma.contract.findMany({ where: { id: { in: ids }, walletId, accountId, deletedAt: null, paymentStatus: { not: 'PAID' }, status: 'ACTIVE', AND: [{ debtorPhone: { not: null } }, { debtorPhone: { not: '' } }] }, select: { id: true, contractNumber: true, debtorName: true, debtorDocument: true, debtorPhone: true, originalValue: true, updatedValue: true, offerValue: true, dueDate: true, debtOrigin: true, productName: true } });
     if (contracts.length !== ids.length) throw new BadRequestException('Selecione apenas contratos ativos, não pagos e com telefone informado');
     return contracts;
   }
@@ -172,15 +172,8 @@ export class LigueLeadService {
       title: dto.title,
       voice_agent_id: agent.externalId,
       phones: contracts.map((contract) => ({
-        phone: contract.debtorPhone,
-        call_context: [
-          `Credor: ${wallet.creditor?.name ?? 'não informado'}`,
-          `Nome do titular: ${contract.debtorName ?? 'não informado'}`,
-          `Primeiros quatro dígitos do CPF esperados para confirmação interna — nunca leia em voz alta: ${this.spellDigits(contract.debtorDocument.slice(0, 4))}`,
-          'Regra obrigatória de confirmação: peça somente os quatro primeiros dígitos do CPF. Compare exatamente os quatro dígitos informados com o valor esperado acima. Nunca peça nem repita o CPF completo. Só considere a pessoa confirmada quando os quatro dígitos coincidirem; se errar duas vezes, encerre a ligação sem informar detalhes da cobrança.',
-          `NÚMERO DO CONTRATO — leia exatamente os caracteres separados por vírgulas: ${this.spellContractNumber(contract.contractNumber)}`,
-          `VALOR AUTORIZADO PARA FALAR AO CLIENTE — copie a fala exata, sem converter ou arredondar: ${this.paymentAmountContext(contract.updatedValue)}`,
-        ].join('; '),
+        phone: this.normalizePhone(contract.debtorPhone!),
+        call_context: this.callContext(contract, wallet.creditor?.name),
       })),
       ...(dto.retryAttempts
         ? { retry_attempts: dto.retryAttempts, retry_interval_min: dto.retryIntervalMin ?? 30 }
@@ -237,6 +230,35 @@ export class LigueLeadService {
 
   private paymentAmountContext(value: unknown) {
     return `FALA EXATA (pronuncie somente estas palavras, sem símbolos ou números): “${this.currencyInWords(value)}”`;
+  }
+
+  /**
+   * Recipient-specific context accepted by LigueLead (1 to 1,500 characters).
+   * It intentionally contains only the first four CPF digits, so the agent can
+   * confirm identity without ever receiving or speaking the full document.
+   */
+  private callContext(contract: {
+    contractNumber: string; debtorName: string | null; debtorDocument: string;
+    updatedValue: unknown; offerValue: unknown; dueDate: Date | null;
+    debtOrigin: string | null; productName: string | null;
+  }, creditorName?: string | null) {
+    const offerValue = contract.offerValue ?? contract.updatedValue;
+    const dueDate = contract.dueDate
+      ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(contract.dueDate)
+      : 'não informada';
+    const details = [
+      'CONTEXTO PRIVADO DO CONTRATO. Use os dados abaixo somente nesta ligação.',
+      `Credor: ${creditorName?.trim() || 'não informado'}`,
+      `Titular: ${contract.debtorName?.trim() || 'não informado'}`,
+      `Contrato: ${this.spellContractNumber(contract.contractNumber)}`,
+      `Vencimento: ${dueDate}`,
+      contract.debtOrigin?.trim() ? `Origem: ${contract.debtOrigin.trim()}` : null,
+      contract.productName?.trim() ? `Produto ou serviço: ${contract.productName.trim()}` : null,
+      `Valor atualizado: ${this.paymentAmountContext(contract.updatedValue)}`,
+      `Oferta atual à vista: ${this.paymentAmountContext(offerValue)}`,
+      `Confirmação de identidade: peça somente os quatro primeiros dígitos do CPF. Valor esperado internamente: ${this.spellDigits(contract.debtorDocument.slice(0, 4))}. Nunca peça, informe ou repita o CPF completo. Só revele os detalhes do contrato após a coincidência; após duas tentativas incorretas, encerre sem revelar informações.`,
+    ].filter(Boolean).join('; ');
+    return details.replace(/\s+/g, ' ').trim().slice(0, 1500);
   }
 
   private numberInWords(value: number): string {

@@ -5,7 +5,7 @@ export class UpsertLigueLeadAgentDto {
   @IsString() @Length(1, 100) name!: string;
   @IsString() @Length(1, 35000) prompt!: string;
   @IsOptional() @IsString() @Length(1, 600) greetings?: string;
-  @IsIn(['lumen-mini', 'lumen-1', 'prisma-1']) modelVersion: 'lumen-mini' | 'lumen-1' | 'prisma-1' = 'lumen-1';
+  @IsIn(['lumen-mini', 'lumen-1', 'prisma-1', 'horizon-1']) modelVersion: 'lumen-mini' | 'lumen-1' | 'prisma-1' | 'horizon-1' = 'horizon-1';
   @IsString() @Length(1, 100) voiceId!: string;
   @IsOptional() @IsBoolean() active?: boolean;
 }
