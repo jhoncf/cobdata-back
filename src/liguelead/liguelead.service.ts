@@ -238,6 +238,11 @@ export class LigueLeadService {
     return `FALA EXATA (pronuncie somente estas palavras, sem símbolos ou números): “${this.currencyInWords(value)}”`;
   }
 
+  private digitsInWords(value: string) {
+    const names = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+    return value.replace(/\D/g, '').split('').map((digit) => names[Number(digit)]).join(' ');
+  }
+
   /**
    * Recipient-specific context accepted by LigueLead (1 to 1,500 characters).
    * It intentionally contains only the first four CPF digits, so the agent can
@@ -262,11 +267,11 @@ export class LigueLeadService {
       `Titular: ${contract.debtorName?.trim() || 'não informado'}`,
       // These labels deliberately match the agent prompt verbatim. Keep the
       // essential details first: LigueLead caps call_context at 1,500 chars.
-      `NÚMERO DO CONTRATO: ${this.spellContractNumber(contract.contractNumber)}`,
-      `VALOR AUTORIZADO PARA FALAR AO CLIENTE: ${this.paymentAmountContext(contract.updatedValue)}`,
-      `PERCENTUAL DE DESCONTO: ${discountSpeech}`,
-      `OFERTA ATUAL À VISTA: ${this.paymentAmountContext(offerValue)}`,
-      `FALA OBRIGATÓRIA APÓS CONFIRMAÇÃO: “A pendência é referente ao contrato ${this.spellContractNumber(contract.contractNumber)}, no valor de ${this.currencyInWords(contract.updatedValue)}. Com desconto de ${discountSpeech}, sua oferta à vista é ${this.currencyInWords(offerValue)}. Você tem interesse em receber por SMS um link para pagamento?”`,
+      `NÚMERO DO CONTRATO POR EXTENSO: ${this.digitsInWords(contract.contractNumber)}`,
+      `VALOR TOTAL DA DÍVIDA POR EXTENSO: ${this.currencyInWords(contract.updatedValue)}`,
+      `PERCENTUAL DE DESCONTO POR EXTENSO: ${discountSpeech}`,
+      `OFERTA À VISTA POR EXTENSO: ${this.currencyInWords(offerValue)}`,
+      `FRASE PRONTA DA OFERTA — leia integralmente, sem pausar nem alterar: “A pendência é referente ao contrato ${this.digitsInWords(contract.contractNumber)}. O valor total da dívida é ${this.currencyInWords(contract.updatedValue)}. Com desconto de ${discountSpeech}, sua oferta à vista é ${this.currencyInWords(offerValue)}. Você tem interesse em receber por SMS um link para pagamento?”`,
       `Vencimento: ${dueDate}`,
       contract.debtOrigin?.trim() ? `Origem: ${contract.debtOrigin.trim()}` : null,
       contract.productName?.trim() ? `Produto ou serviço: ${contract.productName.trim()}` : null,
