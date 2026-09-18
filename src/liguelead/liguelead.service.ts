@@ -352,6 +352,7 @@ export class LigueLeadService {
     const campaignId = payload?.campaign_id ?? payload?.campaignId ?? payload?.campaign?.id ?? payload?.data?.campaign_id ?? payload?.data?.campaignId ?? payload?.data?.campaign?.id;
     const rawPhone = payload?.phone ?? payload?.campaign?.phone ?? payload?.data?.phone ?? payload?.data?.campaign?.phone;
     if (!campaignId || !rawPhone) throw new BadRequestException('A ação de link deve informar campaign_id e phone');
+    if (!this.paymentLinkWasRequested(payload)) return { accepted: true, smsSent: false, reason: 'payment_link_not_requested' };
     const phone = this.normalizePhone(String(rawPhone));
     const item = await this.prisma.ligueLeadDispatchItem.findFirst({
       where: { externalCampaignId: String(campaignId), phone },
@@ -378,6 +379,22 @@ export class LigueLeadService {
       await this.prisma.ligueLeadWebhookEvent.delete({ where: { eventKey } }).catch(() => undefined);
       throw error;
     }
+  }
+
+  /** The HTTP action is delivered at the end of the call; only send after an explicit affirmative request. */
+  private paymentLinkWasRequested(payload: any) {
+    if (payload?.payment_link_requested === true || payload?.data?.payment_link_requested === true) return true;
+    const campaign = payload?.campaign ?? payload?.data?.campaign ?? {};
+    if (campaign?.action_executed && campaign.action_executed !== 'http_webhook') return false;
+    const transcript = campaign?.transcript;
+    if (!Array.isArray(transcript)) return false;
+    const userMessages = transcript
+      .filter((entry: any) => String(entry?.role).toLowerCase() === 'user')
+      .map((entry: any) => String(entry?.content ?? '').trim().toLowerCase())
+      .filter(Boolean);
+    const lastReply = userMessages.at(-1) ?? '';
+    if (!lastReply || /\b(não|nao|não quero|nao quero|não precisa|nao precisa)\b/.test(lastReply)) return false;
+    return /\b(sim|quero|pode|manda|mandar|envia|enviar|receber|link)\b/.test(lastReply);
   }
 
   async processWebhook(tokens: Array<string | undefined>, payload: any) {
