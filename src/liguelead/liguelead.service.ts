@@ -256,13 +256,15 @@ export class LigueLeadService {
       'CONTEXTO PRIVADO DO CONTRATO. Use os dados abaixo somente nesta ligação.',
       `Credor: ${creditorName?.trim() || 'não informado'}`,
       `Titular: ${contract.debtorName?.trim() || 'não informado'}`,
-      `Contrato: ${this.spellContractNumber(contract.contractNumber)}`,
+      // These labels deliberately match the agent prompt verbatim. Keep the
+      // essential details first: LigueLead caps call_context at 1,500 chars.
+      `NÚMERO DO CONTRATO: ${this.spellContractNumber(contract.contractNumber)}`,
+      `VALOR AUTORIZADO PARA FALAR AO CLIENTE: ${this.paymentAmountContext(contract.updatedValue)}`,
+      `OFERTA ATUAL À VISTA: ${this.paymentAmountContext(offerValue)}`,
       `Vencimento: ${dueDate}`,
       contract.debtOrigin?.trim() ? `Origem: ${contract.debtOrigin.trim()}` : null,
       contract.productName?.trim() ? `Produto ou serviço: ${contract.productName.trim()}` : null,
-      `Valor atualizado: ${this.paymentAmountContext(contract.updatedValue)}`,
-      `Oferta atual à vista: ${this.paymentAmountContext(offerValue)}`,
-      `Confirmação de identidade: peça somente os quatro primeiros dígitos do CPF. Valor esperado internamente: ${this.spellDigits(contract.debtorDocument.slice(0, 4))}. Nunca peça, informe ou repita o CPF completo. Só revele os detalhes do contrato após a coincidência; após duas tentativas incorretas, encerre sem revelar informações.`,
+      `Confirmação de identidade: peça somente os quatro primeiros dígitos do CPF. Valor esperado internamente: ${this.spellDigits(contract.debtorDocument.slice(0, 4))}. Nunca peça, informe ou repita o CPF completo. Só revele detalhes após a coincidência; após duas tentativas incorretas, encerre sem revelar informações.`,
     ].filter(Boolean).join('; ');
     return details.replace(/\s+/g, ' ').trim().slice(0, 1500);
   }
