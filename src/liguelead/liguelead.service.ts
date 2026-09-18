@@ -89,7 +89,7 @@ export class LigueLeadService {
   }
 
   private async eligibleContracts(walletId: string, accountId: string, ids: string[]) {
-    const contracts = await this.prisma.contract.findMany({ where: { id: { in: ids }, walletId, accountId, deletedAt: null, paymentStatus: { not: 'PAID' }, status: 'ACTIVE', AND: [{ debtorPhone: { not: null } }, { debtorPhone: { not: '' } }] }, select: { id: true, contractNumber: true, debtorName: true, debtorDocument: true, debtorPhone: true, originalValue: true, updatedValue: true, offerValue: true, dueDate: true, debtOrigin: true, productName: true } });
+    const contracts = await this.prisma.contract.findMany({ where: { id: { in: ids }, walletId, accountId, deletedAt: null, paymentStatus: { not: 'PAID' }, status: 'ACTIVE', AND: [{ debtorPhone: { not: null } }, { debtorPhone: { not: '' } }] }, select: { id: true, contractNumber: true, debtorName: true, debtorDocument: true, debtorPhone: true, originalValue: true, updatedValue: true, offerValue: true, offerDiscountPercent: true, dueDate: true, debtOrigin: true, productName: true } });
     if (contracts.length !== ids.length) throw new BadRequestException('Selecione apenas contratos ativos, não pagos e com telefone informado');
     return contracts;
   }
@@ -245,10 +245,14 @@ export class LigueLeadService {
    */
   private callContext(contract: {
     contractNumber: string; debtorName: string | null; debtorDocument: string;
-    updatedValue: unknown; offerValue: unknown; dueDate: Date | null;
+    updatedValue: unknown; offerValue: unknown; offerDiscountPercent: unknown; dueDate: Date | null;
     debtOrigin: string | null; productName: string | null;
   }, creditorName?: string | null) {
     const offerValue = contract.offerValue ?? contract.updatedValue;
+    const discountPercent = Number(contract.offerDiscountPercent ?? 0);
+    const discountSpeech = Number.isInteger(discountPercent)
+      ? `${this.numberInWords(discountPercent)} por cento`
+      : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(discountPercent)} por cento`;
     const dueDate = contract.dueDate
       ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(contract.dueDate)
       : 'não informada';
@@ -260,7 +264,9 @@ export class LigueLeadService {
       // essential details first: LigueLead caps call_context at 1,500 chars.
       `NÚMERO DO CONTRATO: ${this.spellContractNumber(contract.contractNumber)}`,
       `VALOR AUTORIZADO PARA FALAR AO CLIENTE: ${this.paymentAmountContext(contract.updatedValue)}`,
+      `PERCENTUAL DE DESCONTO: ${discountSpeech}`,
       `OFERTA ATUAL À VISTA: ${this.paymentAmountContext(offerValue)}`,
+      `FALA OBRIGATÓRIA APÓS CONFIRMAÇÃO: “A pendência é referente ao contrato ${this.spellContractNumber(contract.contractNumber)}, no valor de ${this.currencyInWords(contract.updatedValue)}. Com desconto de ${discountSpeech}, sua oferta à vista é ${this.currencyInWords(offerValue)}. Você tem interesse em receber por SMS um link para pagamento?”`,
       `Vencimento: ${dueDate}`,
       contract.debtOrigin?.trim() ? `Origem: ${contract.debtOrigin.trim()}` : null,
       contract.productName?.trim() ? `Produto ou serviço: ${contract.productName.trim()}` : null,
