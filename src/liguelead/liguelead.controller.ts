@@ -19,4 +19,8 @@ export class LigueLeadController {
     const bearer = authorization?.replace(/^Bearer\s+/i, '');
     return this.service.processWebhook([authorizationToken, xWebhookToken, bearer, queryToken], payload);
   }
+  @Post('webhooks/liguelead/payment-link') @Public() @HttpCode(200) paymentLink(@Body() payload: any, @Headers('authorization-token') authorizationToken?: string, @Headers('x-webhook-token') xWebhookToken?: string, @Headers('authorization') authorization?: string, @Query('token') queryToken?: string) {
+    const bearer = authorization?.replace(/^Bearer\s+/i, '');
+    return this.service.sendPaymentLinkFromVoiceAction([authorizationToken, xWebhookToken, bearer, queryToken], payload);
+  }
 }

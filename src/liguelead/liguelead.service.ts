@@ -321,7 +321,7 @@ export class LigueLeadService {
     return value.trim().split('').join(', ');
   }
 
-  async processWebhook(tokens: Array<string | undefined>, payload: any) {
+  private authorizeWebhook(tokens: Array<string | undefined>, payload: any) {
     const expected = this.config.get<string>('LIGUELEAD_WEBHOOK_TOKEN');
     const isAuthorized = Boolean(expected) && tokens.some((token) => (
       token
@@ -329,6 +329,53 @@ export class LigueLeadService {
       && timingSafeEqual(Buffer.from(token), Buffer.from(expected!))
     ));
     if (!isAuthorized) throw new UnauthorizedException('Webhook não autorizado');
+    const configuredAppId = this.config.get<string>('LIGUELEAD_APP_ID');
+    if (configuredAppId && payload?.app_id && payload.app_id !== configuredAppId) throw new UnauthorizedException('Aplicação LigueLead inválida');
+  }
+
+  /**
+   * Action invoked by the voice agent after the confirmed holder asks for the
+   * payment link. It accepts the naming variants used by voice-agent actions
+   * but always correlates both the campaign and the original call phone.
+   */
+  async sendPaymentLinkFromVoiceAction(tokens: Array<string | undefined>, payload: any) {
+    this.authorizeWebhook(tokens, payload);
+    await this.prisma.ligueLeadWebhookReceipt.create({
+      data: { event: 'voice.payment_link.requested', payload: payload ?? {} },
+    });
+    const campaignId = payload?.campaign_id ?? payload?.campaignId ?? payload?.campaign?.id ?? payload?.data?.campaign_id ?? payload?.data?.campaignId ?? payload?.data?.campaign?.id;
+    const rawPhone = payload?.phone ?? payload?.campaign?.phone ?? payload?.data?.phone ?? payload?.data?.campaign?.phone;
+    if (!campaignId || !rawPhone) throw new BadRequestException('A ação de link deve informar campaign_id e phone');
+    const phone = this.normalizePhone(String(rawPhone));
+    const item = await this.prisma.ligueLeadDispatchItem.findFirst({
+      where: { externalCampaignId: String(campaignId), phone },
+      include: { dispatch: { select: { accountId: true, walletId: true, userId: true } } },
+    });
+    if (!item) throw new NotFoundException('Ligação não encontrada para o campaign_id e telefone informados');
+    const eventKey = createHash('sha256').update(`${campaignId}|${phone}|voice.payment_link.requested`).digest('hex');
+    try {
+      await this.prisma.ligueLeadWebhookEvent.create({
+        data: { accountId: item.dispatch.accountId, eventKey, event: 'voice.payment_link.requested', payload: payload ?? {} },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') return { accepted: true, duplicate: true, smsSent: false };
+      throw error;
+    }
+    try {
+      const result = await this.sendSms(item.dispatch.walletId, item.dispatch.accountId, item.dispatch.userId, {
+        title: 'Link solicitado em ligação',
+        message: 'Conforme solicitado, consulte sua oferta no link seguro.',
+        contractIds: [item.contractId],
+      });
+      return { accepted: true, smsSent: true, dispatchId: result.id };
+    } catch (error) {
+      await this.prisma.ligueLeadWebhookEvent.delete({ where: { eventKey } }).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async processWebhook(tokens: Array<string | undefined>, payload: any) {
+    this.authorizeWebhook(tokens, payload);
     await this.prisma.ligueLeadWebhookReceipt.create({
       data: { event: typeof payload?.event === 'string' ? payload.event : null, payload: payload ?? {} },
     });
@@ -337,8 +384,6 @@ export class LigueLeadService {
       ? { id: payload.data?.campaign_id, phone: payload.data?.phone, status: payload.data?.status, duration_sec: payload.data?.duration_seconds }
       : payload?.campaign;
     if (!payload || !campaign?.id || !campaign?.phone || !campaign?.status) return { accepted: false };
-    const configuredAppId = this.config.get<string>('LIGUELEAD_APP_ID');
-    if (configuredAppId && payload.app_id && payload.app_id !== configuredAppId) throw new UnauthorizedException('Aplicação LigueLead inválida');
     const phone = this.normalizePhone(String(campaign.phone));
     const item = await this.prisma.ligueLeadDispatchItem.findFirst({ where: { externalCampaignId: String(campaign.id), phone }, include: { dispatch: { select: { accountId: true, walletId: true, type: true } } } });
     if (!item) return { accepted: false };
