@@ -260,6 +260,20 @@ export class CreditorsService {
   async upsertIxcIntegration(id: string, dto: UpsertIxcIntegrationDto, accountId: string) {
     await this.findById(id, accountId);
     const baseUrl = this.normalizeBaseUrl(dto.baseUrl);
+    const existing = await this.prisma.creditorIntegration.findUnique({
+      where: { creditorId_type: { creditorId: id, type: 'IXC' } },
+    });
+    if (!existing && !dto.accessToken) {
+      throw new ConflictException('Informe o token IXC ao criar a integração.');
+    }
+
+    const syncConfig = {
+      syncMinOverdueDays: dto.syncMinOverdueDays ?? existing?.syncMinOverdueDays ?? 0,
+      syncMinDebtValue: dto.syncMinDebtValue ?? existing?.syncMinDebtValue ?? 0,
+      syncEveryDays: dto.syncEveryDays ?? existing?.syncEveryDays ?? 1,
+      syncAtHour: dto.syncAtHour ?? existing?.syncAtHour ?? 7,
+      syncAtMinute: dto.syncAtMinute ?? existing?.syncAtMinute ?? 0,
+    };
     const integration = await this.prisma.creditorIntegration.upsert({
       where: { creditorId_type: { creditorId: id, type: 'IXC' } },
       create: {
@@ -267,11 +281,15 @@ export class CreditorsService {
         creditorId: id,
         type: 'IXC',
         baseUrl,
-        accessTokenEncrypted: this.encryptIntegrationToken(dto.accessToken),
+        accessTokenEncrypted: this.encryptIntegrationToken(dto.accessToken!),
+        ...syncConfig,
       },
       update: {
         baseUrl,
-        accessTokenEncrypted: this.encryptIntegrationToken(dto.accessToken),
+        ...(dto.accessToken
+          ? { accessTokenEncrypted: this.encryptIntegrationToken(dto.accessToken) }
+          : {}),
+        ...syncConfig,
         lastTestedAt: null,
         lastTestSucceeded: null,
         lastTestMessage: null,
@@ -433,6 +451,11 @@ export class CreditorsService {
     lastTestedAt: Date | null;
     lastTestSucceeded: boolean | null;
     lastTestMessage: string | null;
+    syncMinOverdueDays: number;
+    syncMinDebtValue: unknown;
+    syncEveryDays: number;
+    syncAtHour: number;
+    syncAtMinute: number;
     createdAt: Date;
     updatedAt: Date;
   }) {
@@ -441,6 +464,11 @@ export class CreditorsService {
       type: integration.type,
       baseUrl: integration.baseUrl,
       hasAccessToken: true,
+      syncMinOverdueDays: integration.syncMinOverdueDays,
+      syncMinDebtValue: Number(integration.syncMinDebtValue),
+      syncEveryDays: integration.syncEveryDays,
+      syncAtHour: integration.syncAtHour,
+      syncAtMinute: integration.syncAtMinute,
       lastTestedAt: integration.lastTestedAt,
       lastTestSucceeded: integration.lastTestSucceeded,
       lastTestMessage: integration.lastTestMessage,

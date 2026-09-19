@@ -312,6 +312,13 @@ model CreditorIntegration {
   type                 CreditorIntegrationType
   baseUrl              String
   accessTokenEncrypted String
+  /// Stored criteria for the future IXC receivables synchronization.
+  /// They are configuration only; a sync job must explicitly use them.
+  syncMinOverdueDays   Int                     @default(0)
+  syncMinDebtValue     Decimal                 @default(0) @db.Decimal(15, 2)
+  syncEveryDays        Int                     @default(1)
+  syncAtHour           Int                     @default(7)
+  syncAtMinute         Int                     @default(0)
   lastTestedAt         DateTime?
   lastTestSucceeded    Boolean?
   lastTestMessage      String?
