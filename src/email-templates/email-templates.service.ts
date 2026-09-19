@@ -56,6 +56,24 @@ export class EmailTemplatesService {
     return { sent, failed: results.length - sent };
   }
 
+  async sendFiltered(walletId: string, accountId: string, templateId: string, filters: Record<string, any> = {}) {
+    await this.wallet(walletId, accountId);
+    const where: any = { walletId, accountId, deletedAt: null, status: filters.status || filters.contractStatus || 'ACTIVE', paymentStatus: { not: 'PAID' }, debtorEmail: { not: '' } };
+    if (filters.paymentStatus) where.paymentStatus = filters.paymentStatus;
+    if (filters.serasaStatus === 'SYNCED') where.serasaStatus = { in: ['REGISTERED', 'UPDATED'] };
+    else if (filters.serasaStatus) where.serasaStatus = filters.serasaStatus;
+    if (filters.search?.trim()) {
+      const term = filters.search.trim(); const document = term.replace(/\D/g, '');
+      where.OR = [{ contractNumber: { contains: term, mode: 'insensitive' } }, ...(document ? [{ debtorDocument: document }] : [])];
+    }
+    if (filters.updatedValueOperator && filters.updatedValue !== undefined) where.updatedValue = { [filters.updatedValueOperator === 'eq' ? 'equals' : filters.updatedValueOperator]: filters.updatedValue };
+    if (filters.offerValueOperator && filters.offerValue !== undefined) where.offerValue = { [filters.offerValueOperator === 'eq' ? 'equals' : filters.offerValueOperator]: filters.offerValue };
+    if (filters.agingOperator && filters.aging !== undefined) where.agingDays = { [filters.agingOperator === 'eq' ? 'equals' : filters.agingOperator]: filters.aging };
+    if (filters.dateFrom || filters.dateTo) where.occurrenceDate = { ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}), ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}) };
+    const contracts = await this.prisma.contract.findMany({ where, select: { id: true } });
+    return this.sendBatch(walletId, accountId, templateId, contracts.map((contract) => contract.id));
+  }
+
   async send(walletId: string, accountId: string, templateId: string, contractId: string) {
     const [wallet, template, contract] = await Promise.all([
       this.wallet(walletId, accountId),
