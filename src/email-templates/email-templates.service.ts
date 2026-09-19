@@ -79,7 +79,7 @@ export class EmailTemplatesService {
     const clickUrl = `${apiUrl}/email/tracking/click/${click.token}?to=${encodeURIComponent(paymentUrl)}`;
     const pixel = `${apiUrl}/email/tracking/open/${open.token}.gif`;
     const debtorName = contract.debtorName || 'Cliente';
-    const paymentButton = `<a href="${clickUrl}" target="_blank" style="display:inline-block;background:#155dfc;color:#ffffff;text-decoration:none;font:600 16px Arial,sans-serif;padding:15px 24px;border-radius:8px">Ver oferta e gerar Pix</a>`;
+    const paymentButton = `<div style="display:block;text-align:center;margin:24px 0"><a href="${clickUrl}" target="_blank" style="display:inline-block;background:#155dfc;color:#ffffff;text-decoration:none;font:600 16px Arial,sans-serif;padding:15px 24px;border-radius:8px">Ver oferta e gerar Pix</a></div>`;
     const vars: Record<string, string> = { '{{nome_devedor}}': debtorName, '{{devedor_nome}}': debtorName, '{{credor}}': wallet.creditor.name, '{{credor_nome}}': wallet.creditor.name, '{{contrato}}': contract.contractNumber, '{{numero_contrato}}': contract.contractNumber, '{{valor_oferta}}': Number(contract.offerValue ?? contract.updatedValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), '{{link_pagamento}}': paymentButton, '{{botao_pagamento}}': paymentButton };
     const replace = (content: string) => Object.entries(vars).reduce((text, [key, value]) => text.replaceAll(key, value), content);
     const logoUrl = `${appUrl}/cobcom-logo.png`;
