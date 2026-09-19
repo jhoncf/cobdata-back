@@ -5,6 +5,7 @@ import { ImportsService } from './imports.service';
 import { ValidationProcessor } from './processors/validation.processor';
 import { ApplicationProcessor } from './processors/application.processor';
 import { ContractsModule } from '../contracts/contracts.module';
+import { WalletsModule } from '../wallets/wallets.module';
 import { QUEUES } from '../common/constants/queues';
 
 @Module({
@@ -12,6 +13,7 @@ import { QUEUES } from '../common/constants/queues';
     BullModule.registerQueue({ name: QUEUES.IMPORT_VALIDATION }),
     BullModule.registerQueue({ name: QUEUES.IMPORT_APPLICATION }),
     ContractsModule,
+    WalletsModule,
   ],
   controllers: [ImportsController],
   providers: [ImportsService, ValidationProcessor, ApplicationProcessor],

@@ -10,6 +10,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
 import { normalizeColumnMapping, normalizeImportLine } from '../utils/import-line.util';
 import { calculateOffer } from '../../contracts/offer-calculator';
+import { WalletsService } from '../../wallets/wallets.service';
 
 export interface ApplicationJobData {
   batchId: string;
@@ -137,6 +138,7 @@ export class ApplicationProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
     private readonly deduplicationService: DeduplicationService,
+    private readonly walletsService: WalletsService,
   ) {
     super();
   }
@@ -514,6 +516,12 @@ export class ApplicationProcessor extends WorkerHost {
           status: 'APPLIED',
         },
       });
+
+      // The import loop persists the contract data in small, durable chunks.
+      // Once it has completed, use the same set-based pricing routine exposed
+      // by the wallet screen so every unpaid active contract follows its aging
+      // strategy and creditor ceiling (instead of only the legacy flat rate).
+      await this.walletsService.recalculateOffers(walletId, accountId);
 
       this.logger.log(
         `Batch ${batchId} application complete: created=${createdCount}, updated=${updatedCount}, ignored=${ignoredCount}`,
