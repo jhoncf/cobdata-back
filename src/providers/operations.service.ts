@@ -52,6 +52,8 @@ export interface CreateOperationParams {
 
 export interface OperationContractFilters {
   contractStatus?: ContractStatus;
+  /** Contract number or complete CPF/CNPJ, mirroring the contracts table search. */
+  search?: string;
   serasaStatus?: SerasaStatus;
   paymentStatus?: PaymentStatus;
   installmentOnly?: boolean;
@@ -815,6 +817,16 @@ export class OperationsService {
     }
 
     if (filters.contractStatus && filters.contractStatus !== ContractStatus.ACTIVE) return Promise.resolve([]);
+    if (filters.search?.trim()) {
+      const term = filters.search.trim();
+      const document = term.replace(/\D/g, '');
+      where.AND = [{
+        OR: [
+          { contractNumber: { contains: term, mode: 'insensitive' } },
+          ...(document ? [{ debtorDocument: document }] : []),
+        ],
+      }];
+    }
     if (filters.serasaStatus) {
       if (!eligibleStatuses.includes(filters.serasaStatus)) return Promise.resolve([]);
       where.serasaStatus = filters.serasaStatus;

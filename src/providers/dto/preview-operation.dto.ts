@@ -1,4 +1,4 @@
-import { IsBoolean, IsUUID, IsEnum, IsDateString, IsNumber, IsOptional, Min, IsIn } from 'class-validator';
+import { IsBoolean, IsUUID, IsEnum, IsDateString, IsNumber, IsOptional, Min, IsIn, IsString, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { ContractStatus, OperationAction, PaymentStatus, SerasaStatus } from '@prisma/client';
@@ -15,6 +15,7 @@ export class PreviewOperationDto {
   action!: OperationAction;
 
   @IsOptional() @IsEnum(ContractStatus) contractStatus?: ContractStatus;
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsEnum(SerasaStatus) serasaStatus?: SerasaStatus;
   @IsOptional() @IsEnum(PaymentStatus) paymentStatus?: PaymentStatus;
   @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() installmentOnly?: boolean;
