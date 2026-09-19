@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, MaxLength, IsOptional, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength, IsOptional, IsNumber, Min, Max, IsIn } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -28,6 +28,11 @@ export class CreateWalletDto {
 
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(1) @Max(999)
   offerMaxInstallments?: number;
+
+  @ApiPropertyOptional({ description: 'Debt type applied when an imported file does not provide one.', enum: ['COMMERCIAL', 'BANKING', 'SERVICES', 'UTILITIES', 'TELECOM', 'EDUCATION', 'HEALTH', 'CONDOMINIAL', 'OTHER'], default: 'OTHER' })
+  @IsOptional()
+  @IsIn(['COMMERCIAL', 'BANKING', 'SERVICES', 'UTILITIES', 'TELECOM', 'EDUCATION', 'HEALTH', 'CONDOMINIAL', 'OTHER'])
+  defaultDebtType?: string;
 
   @IsOptional() @IsString() @MaxLength(1400)
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)

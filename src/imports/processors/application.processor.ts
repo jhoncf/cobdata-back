@@ -153,7 +153,7 @@ export class ApplicationProcessor extends WorkerHost {
             select: {
               id: true, creditorId: true, cobcomDiscountPercent: true,
               offerFirstInstallmentDays: true, offerMinInstallmentValue: true,
-              offerMaxInstallments: true,
+              offerMaxInstallments: true, defaultDebtType: true,
             },
           },
         },
@@ -183,7 +183,7 @@ export class ApplicationProcessor extends WorkerHost {
       // Large portfolios must not be held in a single interactive transaction:
       // it exceeds the transaction timeout and any restart discards all work.
       // Each committed chunk is idempotent, so BullMQ can safely retry a job.
-      const validLines = lines.filter((line) => this.isLineValid(line));
+      const validLines = lines.filter((line) => this.isLineValid(line, batch.wallet.defaultDebtType));
       for (let offset = 0; offset < validLines.length; offset += ApplicationProcessor.TRANSACTION_BATCH_SIZE) {
         const chunk = validLines.slice(offset, offset + ApplicationProcessor.TRANSACTION_BATCH_SIZE);
         await this.prisma.$transaction(async (tx) => {
@@ -194,7 +194,7 @@ export class ApplicationProcessor extends WorkerHost {
           const debtorName = line['debtorName']?.trim() || '';
           const debtorBirthDate = ApplicationProcessor.toValidDate(line['debtorBirthDate']);
           const contractNumber = line['contractNumber'] || '';
-          const debtType = (line['debtType'] || '').toUpperCase();
+          const debtType = (line['debtType'] || batch.wallet.defaultDebtType).toUpperCase();
           const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']);
           const dueDate = ApplicationProcessor.toValidDate(line['dueDate']);
           const originalValue = parseFloat(line['originalValue'] || '0');          const updatedValue = parseFloat(line['updatedValue'] || '');
@@ -532,14 +532,14 @@ export class ApplicationProcessor extends WorkerHost {
    * Check if a line has all required fields (basic validity check).
    * Lines that were marked invalid during validation are excluded.
    */
-  private isLineValid(line: LineData): boolean {
+  private isLineValid(line: LineData, defaultDebtType: string): boolean {
     const debtorDoc = (line['debtorDocument'] || '').replace(/\D/g, '');
     if (debtorDoc.length !== 11 && debtorDoc.length !== 14) return false;
 
     const contractNumber = line['contractNumber'] || '';
     if (!contractNumber.trim()) return false;
 
-    const debtType = (line['debtType'] || '').toUpperCase();
+    const debtType = (line['debtType'] || defaultDebtType).toUpperCase();
     const validTypes = [
       'COMMERCIAL',
       'BANKING',

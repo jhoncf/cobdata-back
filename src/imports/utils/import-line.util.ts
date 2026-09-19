@@ -164,6 +164,8 @@ export function normalizeImportLine(line: ImportLineData): ImportLineData {
     AGUA: 'UTILITIES',
     CONDOMINIO: 'CONDOMINIAL',
   };
-  normalized.debtType = debtTypeMap[debtType || ''] ?? (debtType || 'OTHER');
+  // Keep this field absent when the file does not provide it. The import
+  // processor then applies the selected wallet's configured default instead.
+  if (debtType) normalized.debtType = debtTypeMap[debtType] ?? debtType;
   return normalized;
 }

@@ -14,7 +14,6 @@ import { normalizeColumnMapping, normalizeImportLine } from '../utils/import-lin
 const REQUIRED_FIELDS = [
   'debtorDocument',
   'contractNumber',
-  'debtType',
   'occurrenceDate',
   'originalValue',
 ];
@@ -75,7 +74,7 @@ export class ValidationProcessor extends WorkerHost {
       const batch = await this.prisma.importBatch.findUnique({
         where: { id: batchId },
         include: {
-          wallet: { select: { id: true, creditorId: true } },
+          wallet: { select: { id: true, creditorId: true, defaultDebtType: true } },
         },
       });
 
@@ -118,6 +117,7 @@ export class ValidationProcessor extends WorkerHost {
           lineNumber,
           batch.wallet.creditorId,
           batch.walletId,
+          batch.wallet.defaultDebtType,
         );
 
         if (lineErrors.length === 0) {
@@ -191,6 +191,7 @@ export class ValidationProcessor extends WorkerHost {
     lineNumber: number,
     creditorId: string,
     batchWalletId: string,
+    defaultDebtType: string,
   ): Promise<ValidationError[]> {
     const errors: ValidationError[] = [];
 
@@ -255,7 +256,7 @@ export class ValidationProcessor extends WorkerHost {
     }
 
     // Validate debtType
-    const debtType = line['debtType'] || '';
+    const debtType = line['debtType'] || defaultDebtType;
     if (!VALID_DEBT_TYPES.includes(debtType.toUpperCase())) {
       errors.push({
         lineNumber,
