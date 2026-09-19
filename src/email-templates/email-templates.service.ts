@@ -74,6 +74,24 @@ export class EmailTemplatesService {
     return this.sendBatch(walletId, accountId, templateId, contracts.map((contract) => contract.id));
   }
 
+  /** Sends a visual/template check without a contract, tracking link or interaction history. */
+  async sendTest(walletId: string, accountId: string, templateId: string, destinationEmail: string) {
+    if (!/^\S+@\S+\.\S+$/.test(destinationEmail ?? '')) throw new BadRequestException('Informe um e-mail de destino válido');
+    const [wallet, template] = await Promise.all([
+      this.wallet(walletId, accountId),
+      this.prisma.walletEmailTemplate.findFirst({ where: { id: templateId, walletId, accountId } }),
+    ]);
+    if (!template) throw new NotFoundException('Template de e-mail não encontrado');
+    const appUrl = this.config.get<string>('FRONTEND_URL')!.replace(/\/$/, '');
+    const button = '<div style="display:block;text-align:center;margin:24px 0"><a href="#" style="display:inline-block;background:#155dfc;color:#ffffff;text-decoration:none;font:600 16px Arial,sans-serif;padding:15px 24px;border-radius:8px">Ver oferta e gerar Pix</a></div>';
+    const vars: Record<string, string> = { '{{nome_devedor}}': 'Cliente de teste', '{{devedor_nome}}': 'Cliente de teste', '{{credor}}': wallet.creditor.name, '{{credor_nome}}': wallet.creditor.name, '{{contrato}}': 'CONTRATO-TESTE', '{{numero_contrato}}': 'CONTRATO-TESTE', '{{valor_oferta}}': 'R$ 100,00', '{{link_pagamento}}': button, '{{botao_pagamento}}': button };
+    const replace = (content: string) => Object.entries(vars).reduce((text, [key, value]) => text.replaceAll(key, value), content);
+    const body = template.htmlBody.replace(/Acesse\s+\{\{(?:link_pagamento|botao_pagamento)\}\}\s+para consultar os detalhes e gerar seu Pix\.?/gi, 'Acesse sua oferta para consultar os detalhes e gerar seu Pix.<br/><br/>{{botao_pagamento}}');
+    const html = `<!doctype html><html><body style="margin:0;background:#eef3fb"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="padding:22px 32px;background:#0f4eea"><img src="${appUrl}/cobcom-logo.png" width="52" height="52" alt="CobCom" style="vertical-align:middle;background:#fff;border-radius:10px;padding:4px" /><span style="padding-left:14px;color:#fff;font:700 20px Arial,sans-serif">CobCom</span></td></tr><tr><td style="padding:36px 32px;color:#1d2939;font:16px Arial,sans-serif;line-height:1.65">${replace(body)}</td></tr><tr><td style="padding:20px 32px;background:#f8fafc;color:#667085;font:12px Arial,sans-serif">E-mail de teste — nenhum link é rastreado e nenhum histórico é criado.</td></tr></table></td></tr></table></body></html>`;
+    await this.email.send({ to: destinationEmail.trim(), subject: `[TESTE] ${replace(template.subject)}`, text: replace(template.textBody || template.htmlBody.replace(/<[^>]*>/g, ' ') || 'E-mail de teste'), html });
+    return { sentTo: destinationEmail.trim() };
+  }
+
   async send(walletId: string, accountId: string, templateId: string, contractId: string) {
     const [wallet, template, contract] = await Promise.all([
       this.wallet(walletId, accountId),
