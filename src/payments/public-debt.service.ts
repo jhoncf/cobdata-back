@@ -76,7 +76,7 @@ export class PublicDebtService {
           wallet: { status: 'ACTIVE', deletedAt: null },
         },
       },
-      include: { contract: { select: { ...this.publicContractSelect, accountId: true } } },
+      include: { contract: { select: { ...this.publicContractSelect, accountId: true } }, interaction: { select: { channel: true } } },
     });
     if (!link) throw new NotFoundException('Este link não é mais válido. Faça uma nova consulta.');
     return link;
@@ -93,7 +93,13 @@ export class PublicDebtService {
       if (opened.count && link.interactionId) {
         await tx.contractInteraction.update({
           where: { id: link.interactionId },
-          data: { status: 'READ', summary: 'SMS lido: link temporário acessado', occurredAt: openedAt },
+          data: {
+            status: 'READ',
+            summary: link.interaction?.channel === 'EMAIL'
+              ? 'E-mail: link de pagamento acessado'
+              : 'SMS lido: link temporário acessado',
+            occurredAt: openedAt,
+          },
         });
       }
     });
