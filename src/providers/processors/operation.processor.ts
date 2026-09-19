@@ -129,9 +129,13 @@ export class OperationProcessor extends WorkerHost {
         operationItemId: item.id,
         document: item.contract.debtorDocument,
         contractNumber: item.contract.contractNumber,
-        // A carteira é configurada na própria carteira CRM. Sem um ID
-        // específico, seguimos o padrão oficial da API para securitizadora.
-        wallet: item.contract.wallet.serasaWalletExternalId || 'PRE_CALCULADA',
+        // PRE_CALCULADA is a Serasa API sentinel, not a portal-created wallet.
+        // Any debt carrying our calculated offer must use it together with the
+        // offer parameters; a configured regular wallet ID is used only when
+        // the debt is deliberately sent without a pre-calculated offer.
+        wallet: item.contract.offerValue != null
+          ? 'PRE_CALCULADA'
+          : item.contract.wallet.serasaWalletExternalId || 'PRE_CALCULADA',
         // In the Limpa Nome detail screen this field is displayed as
         // "Produto / Serviço". Keep the normalized type in the CRM, while
         // sending an explicit consumer-facing origin to Serasa.
