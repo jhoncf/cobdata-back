@@ -192,7 +192,12 @@ export class ApplicationProcessor extends WorkerHost {
           // Extract mapped fields
           const debtorDoc = (line['debtorDocument'] || '').replace(/\D/g, '');
           const debtorName = line['debtorName']?.trim() || '';
-          const debtorBirthDate = ApplicationProcessor.toValidDate(line['debtorBirthDate']);
+          const parsedBirthDate = ApplicationProcessor.toValidDate(line['debtorBirthDate']);
+          // Optional enrichment only: malformed or future birth dates are
+          // dropped without preventing the contract from being imported.
+          const debtorBirthDate = parsedBirthDate && parsedBirthDate <= new Date()
+            ? parsedBirthDate
+            : null;
           const contractNumber = line['contractNumber'] || '';
           const debtType = (line['debtType'] || batch.wallet.defaultDebtType).toUpperCase();
           const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']);

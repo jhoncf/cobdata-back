@@ -191,7 +191,7 @@ export class ValidationProcessor extends WorkerHost {
     lineNumber: number,
     creditorId: string,
     batchWalletId: string,
-    defaultDebtType: string,
+    defaultDebtType = 'OTHER',
   ): Promise<ValidationError[]> {
     const errors: ValidationError[] = [];
 
@@ -288,11 +288,13 @@ export class ValidationProcessor extends WorkerHost {
       });
     }
 
+    // Birth date enriches the debtor record only. An invalid optional value is
+    // discarded by the application processor and must not block the contract.
     const birthDateStr = line['debtorBirthDate'] || '';
     if (birthDateStr) {
       const birthDate = new Date(birthDateStr);
       if (isNaN(birthDate.getTime()) || birthDate > new Date()) {
-        errors.push({ lineNumber, errorCode: 'INVALID_FORMAT', fieldName: 'debtorBirthDate', message: 'Data de nascimento em formato inválido', fieldValue: birthDateStr });
+        this.logger.warn(`Ignoring invalid optional birth date on import line ${lineNumber}`);
       }
     }
 
