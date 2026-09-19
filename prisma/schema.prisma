@@ -185,6 +185,7 @@ model Account {
   ligueLeadWebhookEvents   LigueLeadWebhookEvent[]
   contractInteractions     ContractInteraction[]
   publicDebtAccessLinks    PublicDebtAccessLink[]
+  walletEmailTemplates     WalletEmailTemplate[]
   apiKeys                  ApiKey[]
   creditorIntegrations     CreditorIntegration[]
 }
@@ -393,6 +394,7 @@ model Wallet {
   ligueLeadDispatches  LigueLeadDispatch[]
   contractInteractions ContractInteraction[]
   publicDebtAccessLinks PublicDebtAccessLink[]
+  emailTemplates       WalletEmailTemplate[]
 }
 
 /// Wallet strategy by aging range. The creditor policy remains the live ceiling;
@@ -522,11 +524,49 @@ model ContractInteraction {
   wallet   Wallet   @relation(fields: [walletId], references: [id])
   contract Contract @relation(fields: [contractId], references: [id])
   publicDebtAccessLink PublicDebtAccessLink?
+  emailTrackingLinks   EmailTrackingLink[]
 
   @@index([contractId, occurredAt])
   @@index([walletId, channel, status])
   @@index([accountId, occurredAt])
   @@index([provider, externalId])
+}
+
+/// Reusable communication content, owned by a wallet. Criteria are kept as
+/// JSON so campaign segmentation can evolve without changing sent content.
+model WalletEmailTemplate {
+  id          String   @id @default(uuid())
+  accountId   String
+  walletId    String
+  name        String
+  subject     String
+  htmlBody    String   @db.Text
+  textBody    String?  @db.Text
+  criteria    Json?
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+  wallet  Wallet  @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, isActive])
+  @@index([accountId, walletId])
+}
+
+/// Opaque single-use telemetry URLs. They never embed debtor identifiers.
+model EmailTrackingLink {
+  id            String   @id @default(uuid())
+  token         String   @unique
+  interactionId String
+  kind          String
+  openedAt      DateTime?
+  createdAt     DateTime @default(now())
+
+  interaction ContractInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([interactionId, kind])
 }
 
 /// Short-lived, opaque links used in outbound SMS. The token is a bearer

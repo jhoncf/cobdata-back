@@ -39,7 +39,7 @@ export class EmailService {
     return this.configService.get<string>('FRONTEND_URL')!.replace(/\/$/, '');
   }
 
-  private async send(message: {
+  async send(message: {
     to: string;
     subject: string;
     text: string;

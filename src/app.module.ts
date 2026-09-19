@@ -20,6 +20,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
 import { WhatsAppBotModule } from './whatsapp-bot/whatsapp-bot.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
+import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { JwtAuthGuard, RolesGuard, ScopeGuard, MustResetPasswordGuard } from './common/guards';
 import { AuditInterceptor } from './common/interceptors';
 import { RequestIdMiddleware } from './common/middleware';
@@ -66,6 +67,7 @@ import { QUEUES } from './common/constants/queues';
     WhatsAppBotModule,
     DashboardModule,
     ReportsModule,
+    EmailTemplatesModule,
   ],
   controllers: [],
   providers: [
