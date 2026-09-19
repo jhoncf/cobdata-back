@@ -80,6 +80,12 @@ export class BbPixWebhookService {
     // 7.3 — Idempotent: check if settlement already exists for this endToEndId
     const existingSettlement = await this.findExistingSettlement(endToEndId);
     if (existingSettlement) {
+      // Older settlements predate the visible interaction history. A replayed
+      // webhook repairs that history without duplicating the settlement.
+      const existingCharge = await this.prisma.paymentCharge.findFirst({ where: { txid } });
+      if (existingCharge) {
+        await this.recordPixPaidInteraction(existingCharge, endToEndId, valor, new Date(horario));
+      }
       this.logger.debug(
         `Settlement already exists for endToEndId=${endToEndId}, skipping`,
       );
