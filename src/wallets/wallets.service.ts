@@ -83,7 +83,7 @@ export class WalletsService implements OnModuleDestroy {
         offerFirstInstallmentDays: dto.offerFirstInstallmentDays ?? 5,
         offerMinInstallmentValue: dto.offerMinInstallmentValue ?? 0.01,
         offerMaxInstallments: dto.offerMaxInstallments ?? 1,
-        defaultDebtType: dto.defaultDebtType ?? 'OTHER',
+        defaultDebtType: (dto.defaultDebtType ?? 'OTHER') as any,
         smsTemplate: dto.smsTemplate || null,
         commissionPercent: creditor.commissionPercent,
         discountBands: { create: creditor.discountBands.map((band) => ({
