@@ -129,6 +129,7 @@ enum InteractionChannel {
   WHATSAPP
   EMAIL
   SERASA
+  PAYMENT
 }
 
 enum InteractionStatus {

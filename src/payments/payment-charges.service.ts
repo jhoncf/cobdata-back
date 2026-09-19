@@ -6,7 +6,7 @@ import {
   UnprocessableEntityException,
   BadRequestException,
 } from '@nestjs/common';
-import { PaymentStatus, Prisma } from '@prisma/client';
+import { InteractionChannel, InteractionStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -277,6 +277,9 @@ export class PaymentChargesService {
 
       // Create payment event
       await this.createPaymentEvent(charge.id, null, PaymentChargeStatus.ISSUED, PaymentEventSource.MANUAL);
+      if (dto.method === PaymentMethod.PIX || dto.method === PaymentMethod.BOLEPIX) {
+        await this.recordPixIssuedInteraction(contract, charge);
+      }
       await this.registerAgreementFromIssuedCharge(contract, charge);
 
       // Audit
@@ -357,6 +360,7 @@ export class PaymentChargesService {
     const gateway = await this.resolvePixGateway(accountId);
     const existingPix = await this.findExistingValidPix(contractId, gateway.id);
     if (existingPix) {
+      await this.recordPixIssuedInteraction(contract, existingPix);
       await this.registerAgreementFromIssuedCharge(contract, existingPix);
       return existingPix;
     }
@@ -417,6 +421,7 @@ export class PaymentChargesService {
       });
 
       await this.createPaymentEvent(charge.id, null, PaymentChargeStatus.ISSUED, PaymentEventSource.MANUAL);
+      await this.recordPixIssuedInteraction(contract, charge);
       await this.registerAgreementFromIssuedCharge(contract, charge);
 
       await this.auditService.log({
@@ -519,6 +524,7 @@ export class PaymentChargesService {
     const gateway = await this.resolvePixGateway(accountId);
     const existingPix = await this.findExistingValidPix(contract.id, gateway.id);
     if (existingPix) {
+      await this.recordPixIssuedInteraction(contract, existingPix);
       await this.registerAgreementFromIssuedCharge(contract, existingPix);
       return existingPix;
     }
@@ -578,6 +584,7 @@ export class PaymentChargesService {
       });
 
       await this.createPaymentEvent(charge.id, null, PaymentChargeStatus.ISSUED, PaymentEventSource.MANUAL);
+      await this.recordPixIssuedInteraction(contract, charge);
       await this.registerAgreementFromIssuedCharge(contract, charge);
 
       await this.auditService.log({
@@ -757,6 +764,7 @@ export class PaymentChargesService {
     // If PAID, create PaymentSettlement (best-effort, model may not exist yet)
     if (update.status === PaymentChargeStatus.PAID && previousStatus !== PaymentChargeStatus.PAID) {
       await this.createSettlement(charge, update.paidAt ?? new Date(), accountId);
+      await this.recordPixPaidInteraction(charge, update.paidAt ?? new Date(), 'SYNC');
     }
 
     // Audit
@@ -920,6 +928,48 @@ export class PaymentChargesService {
         `Failed to create payment event: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /** Keeps payment activity visible beside communication and Serasa events. */
+  private async recordPixIssuedInteraction(contract: { id: string; accountId: string; walletId: string }, charge: { id: string; amount: Prisma.Decimal | string | number; txid?: string | null; expiresAt?: Date | null; attributedChannel?: string | null }) {
+    const externalId = `PIX_ISSUED:${charge.id}`;
+    const exists = await this.prisma.contractInteraction.findFirst({ where: { contractId: contract.id, externalId } });
+    if (exists) return;
+    await this.prisma.contractInteraction.create({
+      data: {
+        accountId: contract.accountId,
+        walletId: contract.walletId,
+        contractId: contract.id,
+        channel: InteractionChannel.PAYMENT,
+        status: InteractionStatus.COMPLETED,
+        provider: 'BANCO_DO_BRASIL',
+        externalId,
+        summary: `Pix gerado — R$ ${Number(charge.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+        payload: { paymentChargeId: charge.id, txid: charge.txid ?? null, expiresAt: charge.expiresAt?.toISOString() ?? null, eventType: 'PIX_ISSUED' },
+      },
+    });
+  }
+
+  private async recordPixPaidInteraction(charge: { id: string; contractId: string; amount: Prisma.Decimal | string | number; txid?: string | null }, paidAt: Date, source: 'SYNC' | 'WEBHOOK', externalPaymentId?: string) {
+    const externalId = `PIX_PAID:${externalPaymentId ?? charge.id}`;
+    const exists = await this.prisma.contractInteraction.findFirst({ where: { contractId: charge.contractId, externalId } });
+    if (exists) return;
+    const contract = await this.prisma.contract.findUnique({ where: { id: charge.contractId }, select: { accountId: true, walletId: true } });
+    if (!contract) return;
+    await this.prisma.contractInteraction.create({
+      data: {
+        accountId: contract.accountId,
+        walletId: contract.walletId,
+        contractId: charge.contractId,
+        channel: InteractionChannel.PAYMENT,
+        status: InteractionStatus.COMPLETED,
+        provider: 'BANCO_DO_BRASIL',
+        externalId,
+        summary: `Pix pago — R$ ${Number(charge.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+        payload: { paymentChargeId: charge.id, txid: charge.txid ?? null, paidAt: paidAt.toISOString(), source, eventType: 'PIX_PAID' },
+        occurredAt: paidAt,
+      },
+    });
   }
 
   /**

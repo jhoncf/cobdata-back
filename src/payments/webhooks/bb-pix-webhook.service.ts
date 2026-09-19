@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { InteractionChannel, InteractionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OperationsService } from '../../providers/operations.service';
 import {
@@ -150,6 +150,7 @@ export class BbPixWebhookService {
 
     // Create PaymentSettlement idempotently
     await this.ensureSettlement(charge, endToEndId, valor, horario);
+    await this.recordPixPaidInteraction(charge, endToEndId, valor, paidAt);
 
     this.logger.log(
       `Pix payment confirmed: chargeId=${charge.id} txid=${txid} endToEndId=${endToEndId} amount=${valor}`,
@@ -204,6 +205,7 @@ export class BbPixWebhookService {
 
     if (existing) {
       await this.refreshContractPaymentProjection(charge.contractId);
+      await this.recordPixPaidInteraction(charge, endToEndId, valor, new Date(horario));
       return;
     }
 
@@ -221,6 +223,7 @@ export class BbPixWebhookService {
         },
       });
       await this.refreshContractPaymentProjection(charge.contractId);
+      await this.recordPixPaidInteraction(charge, endToEndId, valor, new Date(horario));
     } catch (error: any) {
       // Handle unique constraint violation (race condition between concurrent webhooks)
       if (error?.code === 'P2002') {
@@ -232,6 +235,28 @@ export class BbPixWebhookService {
       }
       throw error;
     }
+  }
+
+  private async recordPixPaidInteraction(charge: Record<string, any>, endToEndId: string, amount: string, paidAt: Date): Promise<void> {
+    const externalId = `PIX_PAID:${endToEndId}`;
+    const exists = await this.prisma.contractInteraction.findFirst({ where: { contractId: charge.contractId, externalId } });
+    if (exists) return;
+    const contract = await this.prisma.contract.findUnique({ where: { id: charge.contractId }, select: { accountId: true, walletId: true } });
+    if (!contract) return;
+    await this.prisma.contractInteraction.create({
+      data: {
+        accountId: contract.accountId,
+        walletId: contract.walletId,
+        contractId: charge.contractId,
+        channel: InteractionChannel.PAYMENT,
+        status: InteractionStatus.COMPLETED,
+        provider: 'BANCO_DO_BRASIL',
+        externalId,
+        summary: `Pix pago — R$ ${Number(amount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+        payload: { paymentChargeId: charge.id, txid: charge.txid ?? null, endToEndId, paidAt: paidAt.toISOString(), source: 'WEBHOOK', eventType: 'PIX_PAID' },
+        occurredAt: paidAt,
+      },
+    });
   }
 
   /**
