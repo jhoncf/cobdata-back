@@ -8,7 +8,11 @@ export interface DebtPayload {
   debtType: string;
   occurrenceDate: string;
   debtValue: number;
-  offer: {
+  /**
+   * Only sent for Serasa's PRE_CALCULADA wallet. A portal-configured Serasa
+   * wallet owns the negotiation rules and must not receive offer parameters.
+   */
+  offer?: {
     value: number;
     dueDaysFirstInstallment: number;
     maxInstallments: number;

@@ -125,29 +125,29 @@ export class OperationProcessor extends WorkerHost {
     operationId: string,
   ): Promise<void> {
     const payloads: DebtPayload[] = items.map((item) => {
+      const serasaWalletExternalId = item.contract.wallet.serasaWalletExternalId?.trim();
       return {
         operationItemId: item.id,
         document: item.contract.debtorDocument,
         contractNumber: item.contract.contractNumber,
-        // PRE_CALCULADA is a Serasa API sentinel, not a portal-created wallet.
-        // Any debt carrying our calculated offer must use it together with the
-        // offer parameters; a configured regular wallet ID is used only when
-        // the debt is deliberately sent without a pre-calculated offer.
-        wallet: item.contract.offerValue != null
-          ? 'PRE_CALCULADA'
-          : item.contract.wallet.serasaWalletExternalId || 'PRE_CALCULADA',
+        // A wallet selected in the CRM is a portal-configured Serasa wallet.
+        // Its negotiation rules are owned by Serasa, so do not override them
+        // with the CRM offer. Without an ID, PRE_CALCULADA requires the CRM
+        // offer parameters below.
+        wallet: serasaWalletExternalId || 'PRE_CALCULADA',
         // In the Limpa Nome detail screen this field is displayed as
         // "Produto / Serviço". Keep the normalized type in the CRM, while
         // sending an explicit consumer-facing origin to Serasa.
         debtType: `ORIGEM: ${item.contract.wallet.creditor.tradeName || item.contract.wallet.creditor.name || item.contract.debtType}`,
         occurrenceDate: item.contract.occurrenceDate.toISOString().slice(0, 10),
-        // The debt keeps its current value; Serasa receives the calculated offer separately.
+        // The debt keeps its current value. Offer parameters are applicable
+        // exclusively to the PRE_CALCULADA scenario.
         debtValue: Number(item.contract.updatedValue),
-        offer: {
+        ...(!serasaWalletExternalId ? { offer: {
           value: Number(item.contract.offerValue ?? item.contract.updatedValue),
           dueDaysFirstInstallment: item.contract.offerFirstInstallmentDays ?? 5,
           maxInstallments: item.contract.offerMaxInstallments ?? 1,
-        },
+        } } : {}),
         ...(item.contract.wallet.creditor.cnpj ? {
           debtOrigin: {
             name: item.contract.wallet.creditor.name,
