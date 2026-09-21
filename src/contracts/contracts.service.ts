@@ -11,7 +11,7 @@ import { CreateContractDto } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { BulkTransferContractsDto } from './dto/bulk-transfer-contracts.dto';
-import { Contract, ContractStatus, Prisma } from '@prisma/client';
+import { Contract, ContractStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PaginatedResponse } from '../common/dto/paginated-response.dto';
 import { calculateOffer } from './offer-calculator';
 
@@ -504,7 +504,7 @@ export class ContractsService {
     portalCreditorId?: string | null,
     includeTotal = true,
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, debtorDocument, search, tags, sortBy, sortDirection } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, paymentDateFrom, paymentDateTo, debtorDocument, search, tags, sortBy, sortDirection } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -518,7 +518,8 @@ export class ContractsService {
       const portalDocument = debtorDocument?.replace(/\D/g, '') ?? '';
       const portalSearch = search?.trim() ?? '';
       const isCancelledPortalList = status === ContractStatus.CANCELLED;
-      if (portalCreditorId && !isCancelledPortalList && portalDocument.length !== 11 && portalSearch.length < 3) {
+      const isPaidPortalList = paymentStatus === PaymentStatus.PAID;
+      if (portalCreditorId && !isCancelledPortalList && !isPaidPortalList && portalDocument.length !== 11 && portalSearch.length < 3) {
       return {
         data: [],
         meta: { total: 0, page, limit, totalPages: 0 },
@@ -613,6 +614,17 @@ export class ContractsService {
       }
     }
 
+    if (paymentDateFrom || paymentDateTo) {
+      const lastPaymentAt: Prisma.DateTimeFilter = { not: null };
+      if (paymentDateFrom) lastPaymentAt.gte = new Date(paymentDateFrom);
+      if (paymentDateTo) {
+        const inclusiveEnd = new Date(paymentDateTo);
+        inclusiveEnd.setUTCHours(23, 59, 59, 999);
+        lastPaymentAt.lte = inclusiveEnd;
+      }
+      where.lastPaymentAt = lastPaymentAt;
+    }
+
     if (debtorDocument) {
       const hash = this.deduplicationService.sha256(debtorDocument);
       where.debtorDocumentHash = hash;
@@ -663,7 +675,9 @@ export class ContractsService {
           ? [{ [sortBy]: sortDirection ?? 'asc' }, { createdAt: 'desc' }]
           : isCancelledPortalList
             ? [{ cancelledAt: 'desc' }, { createdAt: 'desc' }]
-            : { createdAt: 'desc' },
+            : portalCreditorId && paymentStatus === PaymentStatus.PAID
+              ? [{ lastPaymentAt: 'desc' }, { createdAt: 'desc' }]
+              : { createdAt: 'desc' },
         include: { tags: { select: { tag: true } } },
       }),
       includeTotal ? this.prisma.contract.count({ where }) : Promise.resolve(0),

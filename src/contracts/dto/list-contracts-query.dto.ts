@@ -102,6 +102,16 @@ export class ListContractsQueryDto extends PaginationDto {
   @IsDateString()
   dateTo?: string;
 
+  /** Filters by the date on which an agreement was fully paid. */
+  @IsOptional()
+  @IsDateString()
+  paymentDateFrom?: string;
+
+  /** Filters by the date on which an agreement was fully paid. */
+  @IsOptional()
+  @IsDateString()
+  paymentDateTo?: string;
+
   @IsOptional()
   @IsString()
   debtorDocument?: string;
