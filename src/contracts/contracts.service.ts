@@ -615,7 +615,7 @@ export class ContractsService {
     }
 
     if (paymentDateFrom || paymentDateTo) {
-      const lastPaymentAt: Prisma.DateTimeFilter = { not: null };
+      const lastPaymentAt: Prisma.DateTimeNullableFilter = { not: null };
       if (paymentDateFrom) lastPaymentAt.gte = new Date(paymentDateFrom);
       if (paymentDateTo) {
         const inclusiveEnd = new Date(paymentDateTo);
