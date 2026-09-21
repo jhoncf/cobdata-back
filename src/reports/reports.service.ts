@@ -23,6 +23,7 @@ export class ReportsService {
       where,
       orderBy: { lastPaymentAt: 'desc' },
       select: {
+        id: true,
         contractNumber: true,
         debtorName: true,
         agreementReference: true,
@@ -125,6 +126,7 @@ export class ReportsService {
         paymentCharge: { select: { attributedChannel: true } },
         contract: {
           select: {
+            id: true,
             contractNumber: true,
             debtorName: true,
             wallet: { select: { name: true, creditor: { select: { name: true } } } },
@@ -169,6 +171,7 @@ export class ReportsService {
         occurredAt: true,
         contract: {
           select: {
+            id: true,
             contractNumber: true,
             debtorName: true,
             wallet: { select: { name: true, creditor: { select: { name: true } } } },
