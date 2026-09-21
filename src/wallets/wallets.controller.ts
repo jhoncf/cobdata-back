@@ -104,12 +104,12 @@ export class WalletsController {
   @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   @Audit({ action: 'WALLET_DELETE', resourceType: 'Wallet' })
-  @ApiOperation({ summary: 'Soft-delete a wallet', description: 'Logically delete a wallet (ADMIN only, must have no contracts)' })
+  @ApiOperation({ summary: 'Delete a wallet and its contracts', description: 'Logically deletes the wallet and all local contracts. Blocked while there are active or pending Serasa synchronizations.' })
   @ApiResponse({ status: 200, description: 'Wallet deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - ADMIN only' })
   @ApiResponse({ status: 404, description: 'Wallet not found' })
-  @ApiResponse({ status: 409, description: 'Wallet has contracts that must be removed first' })
+  @ApiResponse({ status: 409, description: 'Wallet has active or pending Serasa contracts that must be removed first' })
   async softDelete(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,

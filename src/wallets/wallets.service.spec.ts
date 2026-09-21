@@ -36,6 +36,7 @@ describe('WalletsService', () => {
       },
       contract: {
         count: jest.fn(),
+        updateMany: jest.fn(),
         findMany: jest.fn(),
         groupBy: jest.fn().mockResolvedValue([]),
         aggregate: jest.fn().mockResolvedValue({
@@ -44,6 +45,7 @@ describe('WalletsService', () => {
         }),
       },
     };
+    prisma.$transaction = jest.fn(async (callback) => callback(prisma));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -246,20 +248,24 @@ describe('WalletsService', () => {
   });
 
   describe('softDelete', () => {
-    it('should soft-delete wallet when no contracts exist', async () => {
+    it('should soft-delete the wallet and its local contracts when none are active in Serasa', async () => {
       prisma.wallet.findFirst.mockResolvedValue(mockWallet);
       prisma.contract.count.mockResolvedValue(0);
       prisma.wallet.update.mockResolvedValue({ ...mockWallet, deletedAt: new Date() });
 
       await service.softDelete(mockWalletId, mockAccountId);
 
+      expect(prisma.contract.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { walletId: mockWalletId, accountId: mockAccountId, deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      }));
       expect(prisma.wallet.update).toHaveBeenCalledWith({
         where: { id: mockWalletId },
         data: { deletedAt: expect.any(Date) },
       });
     });
 
-    it('should throw ConflictException when wallet has contracts', async () => {
+    it('should block deletion when contracts are still pending or active in Serasa', async () => {
       prisma.wallet.findFirst.mockResolvedValue(mockWallet);
       prisma.contract.count.mockResolvedValue(5);
 

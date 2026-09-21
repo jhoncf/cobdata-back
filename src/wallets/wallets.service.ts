@@ -412,22 +412,32 @@ export class WalletsService implements OnModuleDestroy {
       throw new NotFoundException('Wallet not found');
     }
 
-    const contractCount = await this.prisma.contract.count({
+    const contractsSyncedWithSerasa = await this.prisma.contract.count({
       where: {
         walletId: wallet.id,
         deletedAt: null,
+        serasaStatus: { in: ['PENDING', 'SENT', 'REGISTERED', 'UPDATED', 'REMOVING'] },
       },
     });
 
-    if (contractCount > 0) {
+    if (contractsSyncedWithSerasa > 0) {
       throw new ConflictException(
-        'Wallet has contracts. They must be moved or deleted before removing the wallet.',
+        `Esta carteira possui ${contractsSyncedWithSerasa} contrato(s) com sincronização da Serasa pendente ou ativa. Remova-os da Serasa antes de excluir a carteira.`,
       );
     }
 
-    await this.prisma.wallet.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    // Keep the financial and audit trail recoverable while removing the
+    // wallet and every local contract from all product queries.
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      await tx.contract.updateMany({
+        where: { walletId: id, accountId, deletedAt: null },
+        data: { deletedAt: now },
+      });
+      await tx.wallet.update({
+        where: { id },
+        data: { deletedAt: now },
+      });
     });
     await this.invalidateListCache(accountId);
   }
