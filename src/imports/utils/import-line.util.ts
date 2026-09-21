@@ -21,6 +21,7 @@ const HEADER_FIELD_MAP: Record<string, string> = {
   'valor_boleto': 'originalValue',
   'vencimento_original': 'dueDate',
   'dt_vencimento': 'dueDate',
+  'data_vencimento': 'dueDate',
   'origem': 'debtOrigin',
   'telefone': 'debtorPhone',
   'telefone_cliente': 'debtorPhone',
@@ -83,12 +84,14 @@ function normalizeCurrencyValue(value: string): string {
 /**
  * Excel stores dates as the number of days since 1899-12-30. Some exports
  * leave their date column formatted as General, yielding values like 44972.
+ * A value between 1 and 31 is normally a day-of-month field, never a complete
+ * contract date; converting it would produce a false date in January 1900.
  */
 function excelSerialDateToIso(value: string): string | null {
   if (!/^\d{1,5}$/.test(value)) return null;
 
   const serial = Number(value);
-  if (!Number.isInteger(serial) || serial < 1 || serial > 70_000) return null;
+  if (!Number.isInteger(serial) || serial < 20_000 || serial > 70_000) return null;
 
   const date = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
   return date.toISOString().slice(0, 10);
@@ -133,6 +136,9 @@ export function normalizeImportLine(line: ImportLineData): ImportLineData {
     } else if (value) {
       const excelDate = excelSerialDateToIso(value);
       if (excelDate) normalized[field] = excelDate;
+      // Do not let a day-of-month (such as "5") fall through to JavaScript's
+      // permissive Date parser, which can silently turn it into another date.
+      else if (/^\d{1,5}$/.test(value)) normalized[field] = '';
     }
   }
 
