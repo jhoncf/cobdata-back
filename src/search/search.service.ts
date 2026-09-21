@@ -112,20 +112,24 @@ export class SearchService {
   ): Promise<ContractSearchItem[]> {
     const digitsOnly = term.replace(/\D/g, '');
 
-    // Only search contracts if the term looks like a CPF (11 digits)
-    if (digitsOnly.length !== 11) {
-      return [];
-    }
+    const contractConditions: any[] = [
+      { contractNumber: { contains: term, mode: 'insensitive' } },
+    ];
 
-    const hash = createHash('sha256').update(digitsOnly).digest('hex');
+    // CPF lookup remains exact (and uses the hash when available), while a
+    // contract number supports the normal partial search used by the header.
+    if (digitsOnly.length === 11) {
+      const hash = createHash('sha256').update(digitsOnly).digest('hex');
+      contractConditions.push(
+        { debtorDocumentHash: hash },
+        { debtorDocument: digitsOnly },
+      );
+    }
 
     const whereClause: any = {
       accountId,
       deletedAt: null,
-      OR: [
-        { debtorDocumentHash: hash },
-        { debtorDocument: digitsOnly },
-      ],
+      OR: contractConditions,
     };
 
     // Scope filtering: only return contracts from wallets in scope
