@@ -46,37 +46,50 @@ export class CreditorRemovalService {
     if (!file?.buffer?.length) throw new UnprocessableEntityException('Selecione um arquivo CSV ou XLSX.');
     if (!/\.(csv|xlsx)$/i.test(file.originalname)) throw new UnprocessableEntityException('Use um arquivo CSV ou XLSX.');
     if (file.size > 100 * 1024 * 1024) throw new UnprocessableEntityException('O arquivo excede o limite de 100 MB.');
-    let sheet: unknown[][];
+    let firstSheet: XLSX.WorkSheet;
     try {
       // `raw: true` is essential for Brazilian CSV values such as "980,00".
       // With formatted parsing, SheetJS coerces that value to 98000.
       const workbook = XLSX.read(file.buffer, { type: 'buffer', cellDates: true, raw: true });
       const sheetName = workbook.SheetNames[0];
       if (!sheetName) throw new Error();
-      const firstSheet = workbook.Sheets[sheetName];
-      if (!firstSheet) throw new Error();
-      sheet = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1, defval: '' });
+      const selectedSheet = workbook.Sheets[sheetName];
+      if (!selectedSheet) throw new Error();
+      firstSheet = selectedSheet;
     } catch { throw new UnprocessableEntityException('Não foi possível ler o arquivo.'); }
-    const [headers = [], ...data] = sheet;
-    const index = (field: keyof Mapping) => headers.findIndex((header) => String(header).trim() === mapping[field].trim());
+    const ref = firstSheet['!ref'];
+    if (!ref) throw new UnprocessableEntityException('O arquivo não possui dados.');
+    const range = XLSX.utils.decode_range(ref);
+    const valueAt = (row: number, column: number) => firstSheet[XLSX.utils.encode_cell({ r: row, c: column })]?.v ?? '';
+    const index = (field: keyof Mapping) => {
+      for (let column = range.s.c; column <= range.e.c; column += 1) {
+        if (String(valueAt(range.s.r, column)).trim() === mapping[field].trim()) return column;
+      }
+      return -1;
+    };
     const indexes = { contractNumber: index('contractNumber'), debtorDocument: index('debtorDocument') };
     if (Object.values(indexes).some((value) => value < 0)) throw new UnprocessableEntityException('O mapeamento não corresponde ao cabeçalho do arquivo.');
     let invalidLines = 0;
-    const rows = data.flatMap((row, offset) => {
-      const contractNumber = String(row[indexes.contractNumber] ?? '').trim();
-      const debtorDocument = String(row[indexes.debtorDocument] ?? '').replace(/\D/g, '');
-      if (!contractNumber || ![11, 14].includes(debtorDocument.length)) { invalidLines++; return []; }
-      return [{ line: offset + 2, contractNumber, debtorDocument }];
-    });
+    const rows: RemovalRow[] = [];
+    // Avoid materialising every column of every line with sheet_to_json. Large
+    // files now retain only the two columns needed by this operation.
+    for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
+      const contractNumber = String(valueAt(row, indexes.contractNumber) ?? '').trim();
+      const debtorDocument = String(valueAt(row, indexes.debtorDocument) ?? '').replace(/\D/g, '');
+      if (!contractNumber || ![11, 14].includes(debtorDocument.length)) { invalidLines += 1; continue; }
+      rows.push({ line: row + 1, contractNumber, debtorDocument });
+    }
     return { rows, invalidLines };
   }
 
   private async resolve(rows: RemovalRow[], accountId: string, creditorId: string) {
     const pairs = [...new Map(rows.map((row) => [`${row.contractNumber}|${row.debtorDocument}`, row])).values()];
     const contracts: Array<Pick<Contract, 'id' | 'contractNumber' | 'debtorDocument' | 'updatedValue' | 'occurrenceDate' | 'status' | 'paymentStatus'>> = [];
-    for (let offset = 0; offset < pairs.length; offset += 200) {
+    // Larger batches reduce round trips substantially for sizeable files while
+    // keeping the generated OR condition within PostgreSQL's safe range.
+    for (let offset = 0; offset < pairs.length; offset += 500) {
       contracts.push(...await this.prisma.contract.findMany({
-        where: { accountId, deletedAt: null, wallet: { creditorId }, OR: pairs.slice(offset, offset + 200).map((row) => ({ contractNumber: row.contractNumber, debtorDocument: row.debtorDocument })) },
+        where: { accountId, deletedAt: null, wallet: { creditorId }, OR: pairs.slice(offset, offset + 500).map((row) => ({ contractNumber: row.contractNumber, debtorDocument: row.debtorDocument })) },
         select: { id: true, contractNumber: true, debtorDocument: true, updatedValue: true, occurrenceDate: true, status: true, paymentStatus: true },
       }));
     }
