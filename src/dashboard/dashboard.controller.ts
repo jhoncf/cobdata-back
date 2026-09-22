@@ -15,4 +15,10 @@ export class DashboardController {
   today(@CurrentUser() user: AuthenticatedUser) {
     return this.dashboardService.today(user.accountId, user.creditorId ?? undefined);
   }
+
+  @Get('agreement-history')
+  @ApiOperation({ summary: 'Histórico consolidado de acordos dos últimos 30 dias' })
+  agreementHistory(@CurrentUser() user: AuthenticatedUser) {
+    return this.dashboardService.agreementHistory(user.accountId, user.creditorId ?? undefined);
+  }
 }
