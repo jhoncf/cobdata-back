@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../common/interfaces';
@@ -12,13 +12,21 @@ export class DashboardController {
 
   @Get('today')
   @ApiOperation({ summary: 'Resumo operacional do dia' })
-  today(@CurrentUser() user: AuthenticatedUser) {
-    return this.dashboardService.today(user.accountId, user.creditorId ?? undefined);
+  today(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('creditorId') creditorId?: string,
+    @Query('walletId') walletId?: string,
+  ) {
+    return this.dashboardService.today(user.accountId, user.creditorId ?? creditorId, walletId);
   }
 
   @Get('agreement-history')
   @ApiOperation({ summary: 'Histórico consolidado de acordos dos últimos 30 dias' })
-  agreementHistory(@CurrentUser() user: AuthenticatedUser) {
-    return this.dashboardService.agreementHistory(user.accountId, user.creditorId ?? undefined);
+  agreementHistory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('creditorId') creditorId?: string,
+    @Query('walletId') walletId?: string,
+  ) {
+    return this.dashboardService.agreementHistory(user.accountId, user.creditorId ?? creditorId, walletId);
   }
 }

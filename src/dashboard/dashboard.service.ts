@@ -28,7 +28,7 @@ export class DashboardService implements OnModuleDestroy {
     await this.redis.quit();
   }
 
-  async today(accountId: string, creditorId?: string) {
+  async today(accountId: string, creditorId?: string, walletId?: string) {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
     }).formatToParts(new Date());
@@ -42,7 +42,7 @@ export class DashboardService implements OnModuleDestroy {
       accountId,
       deletedAt: null,
       agreementCreatedAt: { gte: start, lt: end },
-      ...(creditorId ? { wallet: { creditorId } } : {}),
+      ...((creditorId || walletId) ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
     };
     const [aggregate, breachedAgreements] = await Promise.all([
       this.prisma.contract.aggregate({
@@ -55,7 +55,7 @@ export class DashboardService implements OnModuleDestroy {
           accountId,
           deletedAt: null,
           paymentStatus: PaymentStatus.AGREEMENT_BREACHED,
-          ...(creditorId ? { wallet: { creditorId } } : {}),
+          ...((creditorId || walletId) ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
         },
         _count: { id: true },
         _sum: { agreementTotalAmount: true },
@@ -76,8 +76,8 @@ export class DashboardService implements OnModuleDestroy {
     };
   }
 
-  async agreementHistory(accountId: string, creditorId?: string) {
-    const cacheKey = `dashboard:agreement-history:${accountId}:${creditorId ?? 'all'}`;
+  async agreementHistory(accountId: string, creditorId?: string, walletId?: string) {
+    const cacheKey = `dashboard:agreement-history:${accountId}:${creditorId ?? 'all'}:${walletId ?? 'all'}`;
     try {
       const cached = await this.redis.get(cacheKey);
       if (cached) return JSON.parse(cached);
@@ -86,6 +86,7 @@ export class DashboardService implements OnModuleDestroy {
     }
 
     const creditorFilter = creditorId ? Prisma.sql`AND wallet."creditorId" = ${creditorId}` : Prisma.empty;
+    const walletFilter = walletId ? Prisma.sql`AND wallet.id = ${walletId}` : Prisma.empty;
     const [agreementDailyTotals, paidAgreementDailyTotals, breachDailyTotals] = await Promise.all([
       this.prisma.$queryRaw<Array<{ date: string; count: bigint; amount: Prisma.Decimal }>>(Prisma.sql`
         SELECT TO_CHAR((contract."agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS date,
@@ -98,6 +99,7 @@ export class DashboardService implements OnModuleDestroy {
           AND contract."status" = 'ACTIVE'
           AND contract."paymentStatus" IN ('IN_AGREEMENT', 'INSTALLMENT')
           ${creditorFilter}
+          ${walletFilter}
           AND contract."agreementCreatedAt" >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
           AND contract."agreementCreatedAt" < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
         GROUP BY (contract."agreementCreatedAt" AT TIME ZONE 'America/Sao_Paulo')::date
@@ -114,6 +116,7 @@ export class DashboardService implements OnModuleDestroy {
           AND contract."paymentStatus" = 'PAID'
           AND contract."agreementCreatedAt" IS NOT NULL
           ${creditorFilter}
+          ${walletFilter}
           AND COALESCE(contract."lastPaymentAt", contract."updatedAt") >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
           AND COALESCE(contract."lastPaymentAt", contract."updatedAt") < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
         GROUP BY (COALESCE(contract."lastPaymentAt", contract."updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
@@ -141,6 +144,7 @@ export class DashboardService implements OnModuleDestroy {
           AND contract."status" = 'ACTIVE'
           AND contract."paymentStatus" = 'AGREEMENT_BREACHED'
           ${creditorFilter}
+          ${walletFilter}
           AND COALESCE(breach."occurredAt", contract."updatedAt") >= (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date - 29)::timestamp AT TIME ZONE 'America/Sao_Paulo')
           AND COALESCE(breach."occurredAt", contract."updatedAt") < (((CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
         GROUP BY (COALESCE(breach."occurredAt", contract."updatedAt") AT TIME ZONE 'America/Sao_Paulo')::date
