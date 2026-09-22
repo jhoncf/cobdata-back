@@ -60,6 +60,19 @@ export class CreditorsController {
     return this.usersService.inviteCreditorUser(id, dto, user.accountId);
   }
 
+  @Patch(':id/users/:userId/block')
+  @Roles('ADMIN')
+  @Audit({ action: 'CREDITOR_PORTAL_USER_BLOCK', resourceType: 'User' })
+  @ApiOperation({ summary: 'Block or unblock a creditor portal user' })
+  async setPortalUserBlocked(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body('blocked') blocked: boolean,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.usersService.setCreditorUserBlocked(id, userId, user.accountId, blocked === true);
+  }
+
   @Post()
   @Roles('ADMIN', 'OPERATIONAL')
   @HttpCode(HttpStatus.CREATED)

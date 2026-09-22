@@ -128,6 +128,45 @@ export class UsersService {
   }
 
   /**
+   * Blocks or unblocks a portal user, always scoped to the creditor and account
+   * selected by the administrator. Blocking also revokes refresh sessions so
+   * the user cannot obtain a new access token.
+   */
+  async setCreditorUserBlocked(
+    creditorId: string,
+    userId: string,
+    accountId: string,
+    blocked: boolean,
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, creditorId, accountId, role: 'VIEWER' },
+      select: { id: true, email: true, name: true, isActive: true, passwordHash: true },
+    });
+    if (!user) throw new NotFoundException('Creditor portal user not found');
+
+    if (!blocked && !user.passwordHash) {
+      throw new ConflictException('O convite precisa ser aceito antes de liberar este usuário');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { isActive: !blocked },
+      select: { id: true, email: true, name: true, isActive: true, passwordHash: true },
+    });
+
+    if (blocked) {
+      await this.sessionService.revokeAll(user.id);
+    }
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      name: updated.name,
+      status: this.computeUserStatus(updated.isActive, updated.passwordHash),
+    };
+  }
+
+  /**
    * List users with pagination and optional status filter.
    * Status mapping:
    *   PENDING  = isActive=false AND passwordHash IS NULL
