@@ -203,7 +203,9 @@ export class OperationProcessor extends WorkerHost {
       });
       await this.prisma.contract.updateMany({
         where: { id: { in: items.map((i) => i.contractId) } },
-        data: { serasaStatus: 'UPDATED' },
+        // "Registrado" is the contract's only successful Serasa state.
+        // UPDATED remains on the operation item as an audit/history event.
+        data: { serasaStatus: 'REGISTERED' },
       });
     } else {
       // Error: mark items as FAILED

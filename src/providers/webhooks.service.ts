@@ -203,7 +203,10 @@ export class WebhooksService {
       case 'DebtUpdatedEvent':
         if ((payload.status ?? 201) >= 200 && (payload.status ?? 201) < 300) {
           await this.prisma.contract.update({ where: { id: contractId }, data: {
-            serasaStatus: eventType === 'DebtUpdatedEvent' || payload.status === 204 ? SerasaStatus.UPDATED : SerasaStatus.REGISTERED,
+            // A debt that Serasa accepted, whether created or updated, stays
+            // in the single successful contract state: REGISTERED. The
+            // operation item retains UPDATED as its historical event.
+            serasaStatus: SerasaStatus.REGISTERED,
             debtId: payload.debtId ?? payload.debtIds?.[0],
           } });
         } else {
@@ -263,7 +266,7 @@ export class WebhooksService {
   /**
    * Process DebtCreatedEvent:
    * - Status 201: item → REGISTERED, contract → REGISTERED
-   * - Status 204: item → UPDATED, contract → UPDATED
+   * - Status 204: item → UPDATED, contract → REGISTERED
    * - Status 400/401/500: item → FAILED
    */
   async processDebtCreatedEvent(
@@ -301,7 +304,7 @@ export class WebhooksService {
         this.prisma.contract.update({
           where: { id: operationItem.contractId },
           data: {
-            serasaStatus: SerasaStatus.UPDATED,
+            serasaStatus: SerasaStatus.REGISTERED,
             debtId: payload.debtId || operationItem.contract?.debtId,
           },
         }),
