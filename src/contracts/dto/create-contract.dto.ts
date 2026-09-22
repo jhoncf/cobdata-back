@@ -60,6 +60,11 @@ export class CreateContractDto {
   @IsDateString({}, { message: 'dueDate must be a valid ISO 8601 date string' })
   dueDate!: string;
 
+  @ApiPropertyOptional({ description: 'Product adhesion date (ISO 8601)', example: '2023-09-25' })
+  @IsOptional()
+  @IsDateString({}, { message: 'productAdhesionDate must be a valid ISO 8601 date string' })
+  productAdhesionDate?: string;
+
   @ApiProperty({ description: 'Original debt value in BRL (0.01 to 999,999,999.99)', example: 1500.00, minimum: 0.01, maximum: 999999999.99 })
   @IsNumber({}, { message: 'originalValue must be a number' })
   @Min(0.01)

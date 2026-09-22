@@ -23,7 +23,7 @@ const ALLOWED_EXTENSIONS = ['.csv', '.xlsx'];
 const REQUIRED_MAPPING_FIELDS = ['debtorDocument', 'contractNumber', 'occurrenceDate', 'originalValue'];
 const IMPORT_TARGET_FIELDS = [
   'debtorDocument', 'contractNumber', 'debtType', 'occurrenceDate',
-  'originalValue', 'updatedValue', 'debtorName', 'debtorBirthDate', 'dueDate',
+  'originalValue', 'updatedValue', 'debtorName', 'debtorBirthDate', 'dueDate', 'productAdhesionDate',
   'debtOrigin', 'productName', 'debtorStreet', 'debtorAddressNumber',
   'debtorAddressComplement', 'debtorNeighborhood', 'debtorCity', 'debtorState',
   'debtorZipCode', 'debtorPhone', 'debtorEmail', 'cancelledAt',

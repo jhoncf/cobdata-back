@@ -10,6 +10,9 @@ const HEADER_FIELD_MAP: Record<string, string> = {
   'data_nascimento': 'debtorBirthDate',
   'dt_nascimento': 'debtorBirthDate',
   'nascimento': 'debtorBirthDate',
+  'data_cadastro': 'productAdhesionDate',
+  'data_adesao': 'productAdhesionDate',
+  'data_adesao_produto': 'productAdhesionDate',
   'documento': 'debtorDocument',
   'mes_contrato': 'occurrenceDate',
   // Layout used by the production portfolio export.  Despite its name, the
@@ -126,7 +129,7 @@ export function normalizeColumnMapping(
 
 export function normalizeImportLine(line: ImportLineData): ImportLineData {
   const normalized = { ...line };
-  for (const field of ['occurrenceDate', 'dueDate', 'cancelledAt']) {
+  for (const field of ['occurrenceDate', 'dueDate', 'productAdhesionDate', 'cancelledAt']) {
     const value = normalized[field]?.trim();
     if (value && /^\d{8}$/.test(value)) {
       normalized[field] = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;

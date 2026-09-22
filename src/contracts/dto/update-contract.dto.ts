@@ -49,6 +49,11 @@ export class UpdateContractDto {
   @IsDateString({}, { message: 'dueDate must be a valid ISO 8601 date string' })
   dueDate?: string;
 
+  @ApiPropertyOptional({ description: 'Product adhesion date (ISO 8601)', example: '2023-09-25' })
+  @IsOptional()
+  @IsDateString({}, { message: 'productAdhesionDate must be a valid ISO 8601 date string' })
+  productAdhesionDate?: string;
+
   @ApiPropertyOptional({ description: 'Debt type', enum: ['COMMERCIAL', 'BANKING', 'SERVICES', 'UTILITIES', 'TELECOM', 'EDUCATION', 'HEALTH', 'CONDOMINIAL', 'OTHER'], example: 'BANKING' })
   @IsOptional()
   @IsEnum(DebtType, {

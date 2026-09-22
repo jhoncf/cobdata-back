@@ -640,6 +640,8 @@ model Contract {
   /// Whole-day age of the debt, refreshed on creation/import and every Monday.
   agingDays                 Int            @default(0)
   dueDate                   DateTime?
+  /// Date on which the debtor adhered to the contracted product/service.
+  productAdhesionDate       DateTime?
   originalValue             Decimal        @db.Decimal(15, 2)
   updatedValue              Decimal        @db.Decimal(15, 2)
   debtOrigin                String?

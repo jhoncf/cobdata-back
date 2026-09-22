@@ -190,6 +190,7 @@ export class ContractsService {
           agingDays,
           originalValue: dto.originalValue,
           dueDate,
+          ...(dto.productAdhesionDate !== undefined ? { productAdhesionDate: new Date(dto.productAdhesionDate) } : {}),
         };
 
         updateData.updatedValue = dto.updatedValue;
@@ -253,6 +254,7 @@ export class ContractsService {
         occurrenceDate,
         agingDays,
         dueDate,
+        productAdhesionDate: dto.productAdhesionDate ? new Date(dto.productAdhesionDate) : null,
         originalValue: dto.originalValue,
         updatedValue: dto.updatedValue,
         ...calculatedOffer,
@@ -829,6 +831,9 @@ export class ContractsService {
     }
     if (dto.dueDate !== undefined) {
       updateData.dueDate = new Date(dto.dueDate);
+    }
+    if (dto.productAdhesionDate !== undefined) {
+      updateData.productAdhesionDate = new Date(dto.productAdhesionDate);
     }
     if (dto.debtType !== undefined) {
       updateData.debtType = dto.debtType;
