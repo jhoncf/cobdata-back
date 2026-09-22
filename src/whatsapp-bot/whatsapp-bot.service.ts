@@ -169,7 +169,7 @@ export class WhatsAppBotService {
     const contract = await this.prisma.contract.findUnique({ where: { id: contractId }, include: { wallet: { include: { creditor: true } } } });
     if (!contract) return ['Não localizei esta pendência.'];
     await this.operations.cancelForContest(contractId, contract.accountId, contact);
-    return [`Tudo bem. Vamos respeitar sua solicitação.\n\nO contrato ${contract.contractNumber} foi cancelado por motivo de contestação e desativado da carteira. Quando houver registro ativo na Serasa, a remoção também será solicitada. Um responsável poderá entrar em contato caso seja necessário.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
+    return [`Tudo bem. Registramos sua reclamação.\n\nO contrato ${contract.contractNumber} foi baixado e desativado da carteira. Quando houver registro ativo na Serasa, a remoção também será solicitada. Um responsável poderá entrar em contato caso seja necessário.`, this.contacts(contract.wallet.creditor.name, contract.wallet.creditor.contacts)];
   }
 
   private async paymentCheck(conversation: any): Promise<string[]> {

@@ -420,8 +420,8 @@ export class OperationsService {
 
     const reason = cancellation.reason ?? CancellationReason.CREDITOR_REQUEST;
     const summary = cancellation.summary ?? (reason === CancellationReason.CONTESTATION
-      ? 'Contrato cancelado por motivo de contestação do titular.'
-      : 'Contrato cancelado por solicitação do credor.');
+      ? 'Contrato baixado por reclamação no chatbot.'
+      : 'Contrato baixado por solicitação do credor.');
     const cancelledAt = new Date();
     await this.prisma.$transaction([
       this.prisma.contract.update({
@@ -472,7 +472,7 @@ export class OperationsService {
       channel: InteractionChannel.WHATSAPP,
       provider,
       contact,
-      summary: 'Contrato cancelado por motivo de contestação do titular via Chatwoot.',
+      summary: 'Contrato baixado por reclamação no chatbot.',
     });
   }
 
