@@ -202,8 +202,10 @@ export class ApplicationProcessor extends WorkerHost {
             : null;
           const contractNumber = line['contractNumber'] || '';
           const debtType = (line['debtType'] || batch.wallet.defaultDebtType).toUpperCase();
-          const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']);
+          // The due date is mandatory. The optional contract date is the
+          // occurrence reference; use the due date when it is not supplied.
           const dueDate = ApplicationProcessor.toValidDate(line['dueDate']);
+          const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']) ?? dueDate;
           const originalValue = parseFloat(line['originalValue'] || '0');          const updatedValue = parseFloat(line['updatedValue'] || '');
           const calculatedOffer = calculateOffer(updatedValue, batch.wallet);
           const debtOrigin = line['debtOrigin'] || null;
@@ -219,8 +221,8 @@ export class ApplicationProcessor extends WorkerHost {
           const debtorEmail = line['debtorEmail']?.trim() || null;
           const cancelledAt = ApplicationProcessor.toValidDate(line['cancelledAt']);
 
-          // occurrenceDate is a required column. A row whose occurrence date
-          // cannot be parsed is unusable; skip it instead of aborting the
+          // A valid due date (or optional contract date) is required to build
+          // the internal occurrence reference; skip it instead of aborting the
           // whole batch with a Prisma "Invalid Date" error.
           if (!occurrenceDate) {
             ignoredCount++;
@@ -566,7 +568,7 @@ export class ApplicationProcessor extends WorkerHost {
     ];
     if (!validTypes.includes(debtType)) return false;
 
-    const dateStr = line['occurrenceDate'] || '';
+    const dateStr = line['dueDate'] || '';
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return false;
 
