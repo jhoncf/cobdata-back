@@ -147,6 +147,43 @@ export class ReportsService {
     };
   }
 
+  async exportPixPayments(accountId: string, creditorId?: string, startDate?: string, endDate?: string, walletId?: string) {
+    const period = this.resolvePeriod(startDate, endDate);
+    const where = {
+      accountId,
+      source: PaymentSettlementSource.PIX,
+      status: PaymentSettlementStatus.CONFIRMED,
+      paidAt: { gte: period.start, lt: period.end },
+      ...(creditorId || walletId ? { contract: { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } } : {}),
+    };
+    const rows = await this.prisma.paymentSettlement.findMany({
+      where,
+      orderBy: { paidAt: 'desc' },
+      select: {
+        amount: true,
+        paidAt: true,
+        externalPaymentId: true,
+        paymentCharge: { select: { attributedChannel: true, txid: true } },
+        contract: {
+          select: {
+            contractNumber: true,
+            debtorName: true,
+            debtorDocument: true,
+            wallet: { select: { name: true, creditor: { select: { name: true } } } },
+          },
+        },
+      },
+    });
+    const header = ['Data do pagamento', 'Credor', 'Carteira', 'Número do contrato', 'CPF/CNPJ', 'Devedor', 'Canal', 'Valor pago', 'Identificador externo', 'TXID'];
+    const values = rows.map((row) => [
+      row.paidAt.toISOString(), row.contract.wallet.creditor.name, row.contract.wallet.name,
+      row.contract.contractNumber, row.contract.debtorDocument, row.contract.debtorName ?? '',
+      row.paymentCharge?.attributedChannel ?? 'CobCom', Number(row.amount).toFixed(2).replace('.', ','),
+      row.externalPaymentId ?? '', row.paymentCharge?.txid ?? '',
+    ]);
+    return `\uFEFF${[header, ...values].map((line) => line.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n')}`;
+  }
+
   async communications(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string, walletId?: string) {
     const period = this.resolvePeriod(startDate, endDate);
     const pagination = this.resolvePagination(pageValue, limitValue);

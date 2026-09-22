@@ -58,6 +58,20 @@ export class ReportsController {
     return this.reportsService.pixPayments(user.accountId, user.creditorId ?? creditorId, startDate, endDate, page, limit, walletId);
   }
 
+  @Get('pix-payments/export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="pagamentos-pix-cobcom.csv"')
+  @ApiOperation({ summary: 'Exporta os pagamentos Pix diretos para a CobCom no período' })
+  exportPixPayments(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('creditorId') creditorId?: string,
+    @Query('walletId') walletId?: string,
+  ) {
+    return this.reportsService.exportPixPayments(user.accountId, user.creditorId ?? creditorId, startDate, endDate, walletId);
+  }
+
   @Get('communications')
   @ApiOperation({ summary: 'Comunicações visualizadas ou atendidas no período' })
   communications(
