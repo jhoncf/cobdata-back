@@ -328,9 +328,15 @@ export class PaymentChargesService {
     accountId: string,
     userId: string | undefined,
     requestId: string,
+    options?: { agreementAmountOnly?: boolean; creditorId?: string },
   ) {
     const contract = await this.prisma.contract.findFirst({
-      where: { id: contractId, accountId, deletedAt: null },
+      where: {
+        id: contractId,
+        accountId,
+        deletedAt: null,
+        ...(options?.creditorId ? { wallet: { creditorId: options.creditorId } } : {}),
+      },
       include: { wallet: { include: { creditor: true } } },
     });
 
@@ -352,7 +358,20 @@ export class PaymentChargesService {
     }
 
     // Resolve default gateway for PIX
-    const { baseAmount, amount, discountPercent } = this.resolvePixPricing(contract);
+    if (options?.agreementAmountOnly && !contract.agreementReference) {
+      throw new UnprocessableEntityException('Este contrato ainda não possui um acordo gerado.');
+    }
+    if (options?.agreementAmountOnly && !contract.agreementTotalAmount) {
+      throw new UnprocessableEntityException('O acordo não possui um valor disponível para gerar o Pix.');
+    }
+    const pricing = this.resolvePixPricing(contract);
+    const baseAmount = pricing.baseAmount;
+    const amount = options?.agreementAmountOnly
+      ? new Prisma.Decimal(contract.agreementTotalAmount!)
+      : pricing.amount;
+    const discountPercent = baseAmount.isZero()
+      ? new Prisma.Decimal(0)
+      : baseAmount.minus(amount).div(baseAmount).mul(100).toDecimalPlaces(2);
     if (amount.lessThanOrEqualTo(0)) throw new UnprocessableEntityException('O desconto configurado gera um valor inválido para Pix.');
     const gateway = await this.resolvePixGateway(accountId);
     const existingPix = await this.findExistingValidPix(contractId, gateway.id, amount);

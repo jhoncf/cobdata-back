@@ -16,6 +16,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { CreditorPortalAccess } from '../common/decorators';
 import { PaymentChargesService } from './payment-charges.service';
 import {
   CreatePaymentChargeDto,
@@ -118,6 +119,27 @@ export class PaymentChargesController {
       user.accountId,
       user.id,
       requestId,
+    );
+    return GeneratePixResponseDto.fromEntity(charge);
+  }
+
+  @Post('contracts/:contractId/payment-charges/agreement-pix')
+  @CreditorPortalAccess()
+  @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: 'PAYMENT_CHARGE_AGREEMENT_PIX_CREATED', resourceType: 'PaymentCharge' })
+  @ApiOperation({ summary: 'Emitir Pix pelo valor do acordo' })
+  async createAgreementPixForContract(
+    @Param('contractId', ParseUUIDPipe) contractId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ): Promise<GeneratePixResponseDto> {
+    const requestId = (req as any).id ?? user.sessionId;
+    const charge = await this.paymentChargesService.createPixForContract(
+      contractId,
+      user.accountId,
+      user.id,
+      requestId,
+      { agreementAmountOnly: true, creditorId: user.creditorId },
     );
     return GeneratePixResponseDto.fromEntity(charge);
   }
