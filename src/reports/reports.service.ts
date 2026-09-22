@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { InteractionChannel, InteractionStatus, PaymentSettlementSource, PaymentSettlementStatus, PaymentStatus } from '@prisma/client';
+import { CancellationReason, InteractionChannel, InteractionStatus, PaymentSettlementSource, PaymentSettlementStatus, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 type Period = { start: Date; end: Date };
@@ -182,6 +182,43 @@ export class ReportsService {
       row.externalPaymentId ?? '', row.paymentCharge?.txid ?? '',
     ]);
     return `\uFEFF${[header, ...values].map((line) => line.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n')}`;
+  }
+
+  async complaints(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string, walletId?: string) {
+    const period = this.resolvePeriod(startDate, endDate);
+    const pagination = this.resolvePagination(pageValue, limitValue);
+    const where = {
+      accountId,
+      deletedAt: null,
+      cancellationReason: CancellationReason.CONTESTATION,
+      cancelledAt: { gte: period.start, lt: period.end },
+      ...(creditorId || walletId ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.contract.findMany({
+        where,
+        orderBy: { cancelledAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+        select: {
+          id: true,
+          contractNumber: true,
+          debtorDocument: true,
+          debtorName: true,
+          updatedValue: true,
+          cancelledAt: true,
+          serasaStatus: true,
+          wallet: { select: { name: true, creditor: { select: { name: true } } } },
+        },
+      }),
+      this.prisma.contract.count({ where }),
+    ]);
+    return {
+      period: this.serializePeriod(period),
+      total,
+      meta: this.serializePagination(total, pagination),
+      data: rows.map((row) => ({ ...row, updatedValue: Number(row.updatedValue) })),
+    };
   }
 
   async communications(accountId: string, creditorId?: string, startDate?: string, endDate?: string, pageValue?: string, limitValue?: string, walletId?: string) {

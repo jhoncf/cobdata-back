@@ -58,6 +58,20 @@ export class ReportsController {
     return this.reportsService.pixPayments(user.accountId, user.creditorId ?? creditorId, startDate, endDate, page, limit, walletId);
   }
 
+  @Get('complaints')
+  @ApiOperation({ summary: 'Contratos removidos por reclamação ou contestação no período' })
+  complaints(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('creditorId') creditorId?: string,
+    @Query('walletId') walletId?: string,
+  ) {
+    return this.reportsService.complaints(user.accountId, user.creditorId ?? creditorId, startDate, endDate, page, limit, walletId);
+  }
+
   @Get('pix-payments/export')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="pagamentos-pix-cobcom.csv"')
