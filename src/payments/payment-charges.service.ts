@@ -352,13 +352,10 @@ export class PaymentChargesService {
     }
 
     // Resolve default gateway for PIX
-    const discountPercent = new Prisma.Decimal(contract.wallet.cobcomDiscountPercent ?? 0);
-    const amount = contract.offerValue
-      ? new Prisma.Decimal(contract.offerValue)
-      : new Prisma.Decimal(contract.updatedValue).mul(new Prisma.Decimal(100).minus(discountPercent)).div(100).toDecimalPlaces(2);
+    const { baseAmount, amount, discountPercent } = this.resolvePixPricing(contract);
     if (amount.lessThanOrEqualTo(0)) throw new UnprocessableEntityException('O desconto configurado gera um valor inválido para Pix.');
     const gateway = await this.resolvePixGateway(accountId);
-    const existingPix = await this.findExistingValidPix(contractId, gateway.id);
+    const existingPix = await this.findExistingValidPix(contractId, gateway.id, amount);
     if (existingPix) {
       await this.recordPixIssuedInteraction(contract, existingPix);
       await this.registerAgreementFromIssuedCharge(contract, existingPix);
@@ -405,7 +402,7 @@ export class PaymentChargesService {
           paymentGatewayId: gateway.id,
           method: PaymentMethod.PIX,
           status: PaymentChargeStatus.ISSUED,
-          amount: amount.toString(), baseAmount: contract.updatedValue.toString(), discountPercent: discountPercent.toString(),
+          amount: amount.toString(), baseAmount: baseAmount.toString(), discountPercent: discountPercent.toString(),
           dueDate: contract.dueDate ?? new Date(),
           idempotencyKey,
           externalId: issued.externalId ?? null,
@@ -440,7 +437,7 @@ export class PaymentChargesService {
         contractId: contract.id,
         paymentGatewayId: gateway.id,
         method: PaymentMethod.PIX,
-        amount: contract.updatedValue.toString(),
+        amount: amount.toString(),
         dueDate: contract.dueDate ?? new Date(),
         idempotencyKey,
         txid,
@@ -507,6 +504,8 @@ export class PaymentChargesService {
       throw new UnprocessableEntityException('Contract does not have a valid updatedValue');
     }
 
+    const { baseAmount, amount, discountPercent } = this.resolvePixPricing(contract);
+
     // Check idempotency
     const existingByKey = await this.prisma.paymentCharge.findFirst({
       where: {
@@ -522,7 +521,7 @@ export class PaymentChargesService {
 
     // Issue new Pix
     const gateway = await this.resolvePixGateway(accountId);
-    const existingPix = await this.findExistingValidPix(contract.id, gateway.id);
+    const existingPix = await this.findExistingValidPix(contract.id, gateway.id, amount);
     if (existingPix) {
       await this.recordPixIssuedInteraction(contract, existingPix);
       await this.registerAgreementFromIssuedCharge(contract, existingPix);
@@ -541,7 +540,7 @@ export class PaymentChargesService {
     const input: IssuePaymentChargeInput = {
       contractId: contract.id,
       method: PaymentMethod.PIX,
-      amount: contract.updatedValue.toString(),
+      amount: amount.toString(),
       dueDate: contract.dueDate ?? new Date(),
       idempotencyKey: dto.idempotencyKey,
       txid,
@@ -568,7 +567,9 @@ export class PaymentChargesService {
           paymentGatewayId: gateway.id,
           method: PaymentMethod.PIX,
           status: PaymentChargeStatus.ISSUED,
-          amount: contract.updatedValue.toString(),
+          amount: amount.toString(),
+          baseAmount: baseAmount.toString(),
+          discountPercent: discountPercent.toString(),
           dueDate: contract.dueDate ?? new Date(),
           idempotencyKey: dto.idempotencyKey,
           externalId: issued.externalId ?? null,
@@ -603,7 +604,7 @@ export class PaymentChargesService {
         contractId: contract.id,
         paymentGatewayId: gateway.id,
         method: PaymentMethod.PIX,
-        amount: contract.updatedValue.toString(),
+        amount: amount.toString(),
         dueDate: contract.dueDate ?? new Date(),
         idempotencyKey: dto.idempotencyKey,
         txid,
@@ -789,13 +790,35 @@ export class PaymentChargesService {
    * Finds an existing valid Pix charge for a contract
    * (status ISSUED, expiresAt > now).
    */
-  private async findExistingValidPix(contractId: string, paymentGatewayId: string) {
+  private resolvePixPricing(contract: {
+    updatedValue: Prisma.Decimal | string | number;
+    offerValue: Prisma.Decimal | string | number | null;
+    wallet: { cobcomDiscountPercent: Prisma.Decimal | string | number | null };
+  }) {
+    const baseAmount = new Prisma.Decimal(contract.updatedValue);
+    const fallbackDiscountPercent = new Prisma.Decimal(contract.wallet.cobcomDiscountPercent ?? 0);
+    const amount = contract.offerValue !== null && contract.offerValue !== undefined
+      ? new Prisma.Decimal(contract.offerValue)
+      : baseAmount.mul(new Prisma.Decimal(100).minus(fallbackDiscountPercent)).div(100).toDecimalPlaces(2);
+    const discountPercent = baseAmount.isZero()
+      ? new Prisma.Decimal(0)
+      : baseAmount.minus(amount).div(baseAmount).mul(100).toDecimalPlaces(2);
+
+    return { baseAmount, amount, discountPercent };
+  }
+
+  private async findExistingValidPix(
+    contractId: string,
+    paymentGatewayId: string,
+    expectedAmount: Prisma.Decimal,
+  ) {
     return this.prisma.paymentCharge.findFirst({
       where: {
         contractId,
         paymentGatewayId,
         method: PaymentMethod.PIX,
         status: PaymentChargeStatus.ISSUED,
+        amount: expectedAmount.toString(),
         expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: 'desc' },
