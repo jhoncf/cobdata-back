@@ -52,9 +52,10 @@ export class CreateContractDto {
   })
   debtType!: DebtType;
 
-  @ApiProperty({ description: 'Occurrence date - when the debtor acquired/contracted the service (ISO 8601)', example: '2024-01-15' })
+  @ApiPropertyOptional({ description: 'Legacy occurrence date. Ignored in favor of dueDate.', example: '2024-01-15' })
+  @IsOptional()
   @IsDateString({}, { message: 'occurrenceDate must be a valid ISO 8601 date string' })
-  occurrenceDate!: string;
+  occurrenceDate?: string;
 
   @ApiProperty({ description: 'Due date - when the payment was due (ISO 8601)', example: '2024-02-15' })
   @IsDateString({}, { message: 'dueDate must be a valid ISO 8601 date string' })

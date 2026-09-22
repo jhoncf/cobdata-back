@@ -206,7 +206,7 @@ export class ApplicationProcessor extends WorkerHost {
           // The due date is mandatory. The optional contract date is the
           // occurrence reference; use the due date when it is not supplied.
           const dueDate = ApplicationProcessor.toValidDate(line['dueDate']);
-          const occurrenceDate = ApplicationProcessor.toValidDate(line['occurrenceDate']) ?? dueDate;
+          const occurrenceDate = dueDate;
           const originalValue = parseFloat(line['originalValue'] || '0');          const updatedValue = parseFloat(line['updatedValue'] || '');
           const calculatedOffer = calculateOffer(updatedValue, batch.wallet);
           const debtOrigin = line['debtOrigin'] || null;

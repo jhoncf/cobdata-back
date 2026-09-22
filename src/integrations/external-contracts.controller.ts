@@ -34,7 +34,7 @@ export class ExternalContractsController {
   @ApiKeyScopes('CONTRACTS_WRITE')
   @ApiOperation({
     summary: 'Enviar contrato para a carteira padrão de entrada da API',
-    description: 'Campos obrigatórios: debtorDocument, contractNumber, debtType, occurrenceDate, dueDate, originalValue e updatedValue. Não envie walletId. Chaves restritas usam automaticamente o credor vinculado; chaves com acesso a todos os credores devem informar creditorId.',
+    description: 'Campos obrigatórios: debtorDocument, contractNumber, debtType, dueDate, originalValue e updatedValue. occurrenceDate é legado e é ignorado. Não envie walletId. Chaves restritas usam automaticamente o credor vinculado; chaves com acesso a todos os credores devem informar creditorId.',
   })
   create(@Body() dto: CreateExternalContractDto, @Req() req: any) {
     return this.contracts.createContract(req.integration.accountId, req.integration.accessAllCreditors ? dto.creditorId : req.integration.creditorId, dto);

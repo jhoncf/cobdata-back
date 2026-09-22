@@ -109,14 +109,13 @@ export class ContractsController {
       contract.status,
       contract.paymentStatus,
       contract.serasaStatus,
-      formatDate(contract.occurrenceDate),
-      formatDate(contract.dueDate),
+      formatDate(contract.dueDate ?? contract.occurrenceDate),
       contract.agingDays,
       contract.debtId,
       contract.agreementReference,
     ].map(escapeCsv).join(';'));
     const csv = [
-      'Nº Contrato;Documento;Nome do devedor;Telefone;E-mail;Valor original;Valor atualizado;Valor da oferta;Desconto da oferta (%);Situação;Status financeiro;Status Serasa;Data de ocorrência;Data de vencimento;Aging (dias);Debt ID Serasa;Agreement ID Serasa',
+      'Nº Contrato;Documento;Nome do devedor;Telefone;E-mail;Valor original;Valor atualizado;Valor da oferta;Desconto da oferta (%);Situação;Status financeiro;Status Serasa;Data de vencimento;Aging (dias);Debt ID Serasa;Agreement ID Serasa',
       ...rows,
     ].join('\r\n');
 

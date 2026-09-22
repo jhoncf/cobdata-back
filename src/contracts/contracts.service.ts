@@ -97,13 +97,14 @@ export class ContractsService {
       );
     }
 
-    // 2. Validate occurrenceDate is not future
-    const occurrenceDate = new Date(dto.occurrenceDate);
+    // 2. Due date is the single debt date. The legacy occurrence field is
+    // deliberately ignored when a contract is created.
+    const occurrenceDate = new Date(dto.dueDate);
     const now = new Date();
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     if (occurrenceDate > todayEnd) {
       throw new UnprocessableEntityException(
-        'occurrenceDate must not be a future date',
+        'dueDate must not be a future date',
       );
     }
 
@@ -507,7 +508,7 @@ export class ContractsService {
     portalCreditorId?: string | null,
     includeTotal = true,
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, paymentDateFrom, paymentDateTo, debtorDocument, search, tags, sortBy, sortDirection } = query;
+    const { page, limit, walletId, creditorId, status, serasaStatus, paymentStatus, installmentOnly, agreementOnly, agreementDateFrom, agreementDateTo, minOriginalValue, maxOriginalValue, minUpdatedValue, maxUpdatedValue, updatedValueOperator, updatedValue, offerValueOperator, offerValue, agingOperator, aging, dateFrom, dateTo, paymentDateFrom, paymentDateTo, debtorDocument, search, tags, sortBy, sortDirection } = query;
 
     const where: Prisma.ContractWhereInput = {
       accountId,
@@ -588,6 +589,14 @@ export class ContractsService {
     if (installmentOnly) {
       where.totalInstallments = { gt: 1 };
     }
+    if (agreementOnly) where.agreementReference = { not: null };
+    if (agreementDateFrom || agreementDateTo) {
+      where.agreementCreatedAt = {
+        not: null,
+        ...(agreementDateFrom ? { gte: new Date(agreementDateFrom) } : {}),
+        ...(agreementDateTo ? { lte: new Date(`${agreementDateTo}T23:59:59.999Z`) } : {}),
+      };
+    }
 
     if (minOriginalValue !== undefined || maxOriginalValue !== undefined) {
       where.originalValue = {
@@ -608,12 +617,12 @@ export class ContractsService {
     this.applyAgingComparison(where, agingOperator, aging);
 
     if (dateFrom || dateTo) {
-      where.occurrenceDate = { ...((where.occurrenceDate as object | undefined) ?? {}) };
+      where.dueDate = { ...((where.dueDate as object | undefined) ?? {}) };
       if (dateFrom) {
-        (where.occurrenceDate as any).gte = new Date(dateFrom);
+        (where.dueDate as any).gte = new Date(dateFrom);
       }
       if (dateTo) {
-        (where.occurrenceDate as any).lte = new Date(dateTo);
+        (where.dueDate as any).lte = new Date(dateTo);
       }
     }
 
@@ -827,11 +836,13 @@ export class ContractsService {
       updateData.updatedValue = dto.updatedValue;
     }
 
-    if (dto.occurrenceDate !== undefined) {
-      updateData.occurrenceDate = new Date(dto.occurrenceDate);
-    }
-    if (dto.dueDate !== undefined) {
-      updateData.dueDate = new Date(dto.dueDate);
+    // Due date is the sole debt date. Accept the legacy field for existing
+    // API clients, but persist both columns with exactly the same value.
+    const debtDate = dto.dueDate ?? dto.occurrenceDate;
+    if (debtDate !== undefined) {
+      const date = new Date(debtDate);
+      updateData.dueDate = date;
+      updateData.occurrenceDate = date;
     }
     if (dto.productAdhesionDate !== undefined) {
       updateData.productAdhesionDate = new Date(dto.productAdhesionDate);

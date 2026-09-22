@@ -73,7 +73,7 @@ export class EmailTemplatesService {
     if (filters.updatedValueOperator && filters.updatedValue !== undefined) where.updatedValue = { [filters.updatedValueOperator === 'eq' ? 'equals' : filters.updatedValueOperator]: filters.updatedValue };
     if (filters.offerValueOperator && filters.offerValue !== undefined) where.offerValue = { [filters.offerValueOperator === 'eq' ? 'equals' : filters.offerValueOperator]: filters.offerValue };
     if (filters.agingOperator && filters.aging !== undefined) where.agingDays = { [filters.agingOperator === 'eq' ? 'equals' : filters.agingOperator]: filters.aging };
-    if (filters.dateFrom || filters.dateTo) where.occurrenceDate = { ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}), ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}) };
+    if (filters.dateFrom || filters.dateTo) where.dueDate = { ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}), ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}) };
     const contracts = await this.prisma.contract.findMany({ where, select: { id: true } });
     return this.sendBatch(walletId, accountId, templateId, contracts.map((contract) => contract.id));
   }

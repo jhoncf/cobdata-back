@@ -157,11 +157,12 @@ export function normalizeImportLine(line: ImportLineData): ImportLineData {
     normalized.updatedValue = normalized.originalValue;
   }
 
-  // Some channel templates provide only a due date. Use it as the occurrence
-  // reference so a valid contract can still be created and retain the original
-  // due date separately.
-  if (!normalized.occurrenceDate?.trim() && normalized.dueDate?.trim()) {
+  // The due date is the only debt date. Keep the legacy occurrence field in
+  // sync solely for backwards-compatible integrations.
+  if (normalized.dueDate?.trim()) {
     normalized.occurrenceDate = normalized.dueDate;
+  } else if (normalized.occurrenceDate?.trim()) {
+    normalized.dueDate = normalized.occurrenceDate;
   }
 
   const debtType = normalized.debtType?.trim().toUpperCase();

@@ -207,6 +207,7 @@ export class ReportsService {
           debtorName: true,
           updatedValue: true,
           cancelledAt: true,
+          cancellationReason: true,
           serasaStatus: true,
           wallet: { select: { name: true, creditor: { select: { name: true } } } },
         },

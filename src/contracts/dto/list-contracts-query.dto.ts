@@ -82,7 +82,7 @@ export class ListContractsQueryDto extends PaginationDto {
   @IsIn(['gt', 'lt', 'eq'])
   agingOperator?: 'gt' | 'lt' | 'eq';
 
-  /** Days elapsed since the contract occurrence date. */
+  /** Days elapsed since the debt due date. */
   @IsOptional()
   @Transform(({ value }) => Number(value))
   @IsNumber()
@@ -111,6 +111,19 @@ export class ListContractsQueryDto extends PaginationDto {
   @IsOptional()
   @IsDateString()
   paymentDateTo?: string;
+
+  /** Includes every generated agreement, regardless of payment outcome. */
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  agreementOnly?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  agreementDateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  agreementDateTo?: string;
 
   @IsOptional()
   @IsString()

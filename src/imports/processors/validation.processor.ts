@@ -280,30 +280,6 @@ export class ValidationProcessor extends WorkerHost {
       });
     }
 
-    // Contract date is optional. When omitted, the normalizer uses the due
-    // date as the occurrence reference required by the Contract model.
-    const occurrenceDateStr = line['occurrenceDate'] || '';
-    if (occurrenceDateStr) {
-      const occurrenceDate = new Date(occurrenceDateStr);
-      if (isNaN(occurrenceDate.getTime())) {
-        errors.push({
-          lineNumber,
-          errorCode: 'INVALID_FORMAT',
-          fieldName: 'occurrenceDate',
-          message: 'Data de contratação em formato inválido',
-          fieldValue: line['occurrenceDate'],
-        });
-      } else if (occurrenceDate > new Date()) {
-        errors.push({
-          lineNumber,
-          errorCode: 'INVALID_RANGE',
-          fieldName: 'occurrenceDate',
-          message: 'Data de contratação não pode ser futura',
-          fieldValue: line['occurrenceDate'],
-        });
-      }
-    }
-
     // Birth date enriches the debtor record only. An invalid optional value is
     // discarded by the application processor and must not block the contract.
     const birthDateStr = line['debtorBirthDate'] || '';
