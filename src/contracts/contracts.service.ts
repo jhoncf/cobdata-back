@@ -943,6 +943,67 @@ export class ContractsService {
     });
   }
 
+  /** Recalculates one unpaid contract's offer using its wallet's current rules. */
+  async recalculateOffer(id: string, accountId: string): Promise<Contract> {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id, accountId, deletedAt: null },
+      include: {
+        wallet: {
+          include: {
+            discountBands: { orderBy: { minAgingDays: 'asc' } },
+            creditor: { include: { discountBands: { orderBy: { minAgingDays: 'asc' } } } },
+          },
+        },
+      },
+    });
+    if (!contract) throw new NotFoundException('Contrato não encontrado');
+    if (contract.status !== ContractStatus.ACTIVE) {
+      throw new ConflictException('A oferta só pode ser atualizada em contratos ativos.');
+    }
+    if (contract.paymentStatus === PaymentStatus.PAID) {
+      throw new ConflictException('Não é possível alterar a oferta de um contrato pago.');
+    }
+
+    const agingDays = this.calculateAgingDays(contract.dueDate ?? contract.occurrenceDate);
+    const ceilingBand = contract.wallet.creditor.discountBands.find((band) =>
+      band.minAgingDays <= agingDays && (band.maxAgingDays === null || band.maxAgingDays >= agingDays),
+    );
+    const strategyBand = contract.wallet.discountBands.find((band) =>
+      band.minAgingDays <= agingDays && (band.maxAgingDays === null || band.maxAgingDays >= agingDays),
+    );
+    const maximumDiscountPercent = Number(ceilingBand
+      ? (contract.wallet.offerMaxInstallments > 1 ? ceilingBand.installmentDiscountPercent : ceilingBand.cashDiscountPercent)
+      : contract.wallet.cobcomDiscountPercent);
+    const strategyDiscountPercent = Number(strategyBand
+      ? (contract.wallet.offerMaxInstallments > 1 ? strategyBand.installmentStrategyDiscountPercent : strategyBand.cashStrategyDiscountPercent)
+      : contract.wallet.cobcomDiscountPercent);
+    const offerDiscountPercent = Math.min(strategyDiscountPercent, maximumDiscountPercent);
+    const updatedValue = Number(contract.updatedValue);
+    const offerValue = Math.round(updatedValue * (1 - offerDiscountPercent / 100) * 100) / 100;
+    const minimumInstallment = Number(contract.wallet.offerMinInstallmentValue) || 0;
+    const maxInstallmentsByValue = minimumInstallment > 0
+      ? Math.max(1, Math.floor(offerValue / minimumInstallment))
+      : contract.wallet.offerMaxInstallments;
+    const offerMaxInstallments = Math.min(contract.wallet.offerMaxInstallments, maxInstallmentsByValue);
+    const repasseValue = Math.round(updatedValue * (1 - maximumDiscountPercent / 100) * 100) / 100;
+    const commissionPercent = Number(contract.wallet.creditor.commissionPercent);
+
+    return this.prisma.contract.update({
+      where: { id },
+      data: {
+        agingDays,
+        offerDiscountPercent,
+        maximumDiscountPercent,
+        offerValue,
+        offerFirstInstallmentDays: contract.wallet.offerFirstInstallmentDays,
+        offerMaxInstallments,
+        repasseValue,
+        commissionPercent,
+        commissionValue: Math.round(repasseValue * commissionPercent / 100 * 100) / 100,
+      },
+    });
+  }
+
   /**
    * Soft-delete a contract if serasaStatus allows it.
    */

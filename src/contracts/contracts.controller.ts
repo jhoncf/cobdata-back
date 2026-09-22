@@ -203,6 +203,18 @@ export class ContractsController {
     return this.contractsService.update(id, dto, user.accountId);
   }
 
+  @Post(':id/recalculate-offer')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @HttpCode(HttpStatus.OK)
+  @Audit({ action: 'CONTRACT_OFFER_RECALCULATED', resourceType: 'Contract' })
+  @ApiOperation({ summary: 'Recalculate one contract offer', description: 'Applies the current wallet strategy and creditor ceiling without changing the debt value.' })
+  async recalculateOffer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.contractsService.recalculateOffer(id, user.accountId);
+  }
+
   @Delete(':id')
   @Roles('ADMIN', 'OPERATIONAL')
   @HttpCode(HttpStatus.OK)
