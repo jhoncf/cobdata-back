@@ -64,6 +64,8 @@ export interface OperationContractFilters {
   search?: string;
   serasaStatus?: SerasaStatus;
   paymentStatus?: PaymentStatus;
+  /** Restricts CREATE_OR_UPDATE to contracts that already exist at Serasa. */
+  resyncOnly?: boolean;
   installmentOnly?: boolean;
   minOriginalValue?: number;
   maxOriginalValue?: number;
@@ -129,7 +131,8 @@ export class OperationsService {
     }
     await this.getSerasaProvider(accountId);
 
-    const eligibleStatuses = this.getEligibleStatuses(action);
+    this.assertResyncAction(action, filters.resyncOnly);
+    const eligibleStatuses = this.getEligibleStatuses(action, filters.resyncOnly);
     const contracts = await this.selectEligibleContracts(walletId, action, eligibleStatuses, filters);
 
     return {
@@ -159,7 +162,8 @@ export class OperationsService {
     const providerId = provider.id;
 
     // Select eligible contracts
-    const eligibleStatuses = this.getEligibleStatuses(action);
+    this.assertResyncAction(action, filters.resyncOnly);
+    const eligibleStatuses = this.getEligibleStatuses(action, filters.resyncOnly);
     const eligibleContracts = await this.selectEligibleContracts(
       walletId,
       action,
@@ -818,8 +822,10 @@ export class OperationsService {
       serasaStatus: { in: eligibleStatuses },
     };
 
-    // For REMOVE, debtId must exist
-    if (action === OperationAction.REMOVE) {
+    // Removal and resynchronization must target a debt already known by the
+    // CRM. This keeps resynchronization strictly as an update, never an
+    // accidental inclusion at Serasa.
+    if (action === OperationAction.REMOVE || filters.resyncOnly) {
       where.debtId = { not: null };
     } else {
       // Serasa só recebe dívidas financeiramente em aberto. Acordos,
@@ -892,10 +898,17 @@ export class OperationsService {
    * Get the eligible provider statuses for an action.
    * Exported for testing.
    */
-  getEligibleStatuses(action: OperationAction): SerasaStatus[] {
+  getEligibleStatuses(action: OperationAction, resyncOnly = false): SerasaStatus[] {
+    if (resyncOnly) return ELIGIBLE_FOR_REMOVE;
     if (action === OperationAction.CREATE_OR_UPDATE) {
       return ELIGIBLE_FOR_CREATE;
     }
     return ELIGIBLE_FOR_REMOVE;
+  }
+
+  private assertResyncAction(action: OperationAction, resyncOnly?: boolean) {
+    if (resyncOnly && action !== OperationAction.CREATE_OR_UPDATE) {
+      throw new UnprocessableEntityException('Ressincronização é permitida somente para atualização de contratos na Serasa');
+    }
   }
 }

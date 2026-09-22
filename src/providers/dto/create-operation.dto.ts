@@ -16,6 +16,7 @@ export class CreateOperationDto {
   @IsOptional() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsEnum(SerasaStatus) serasaStatus?: SerasaStatus;
   @IsOptional() @IsEnum(PaymentStatus) paymentStatus?: PaymentStatus;
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() resyncOnly?: boolean;
   @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() installmentOnly?: boolean;
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) minOriginalValue?: number;
   @IsOptional() @Transform(({ value }) => Number(value)) @IsNumber() @Min(0) maxOriginalValue?: number;

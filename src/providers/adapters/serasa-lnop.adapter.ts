@@ -168,7 +168,10 @@ export class SerasaLnopAdapter implements ProviderAdapter {
       const httpStatus = response.status;
 
       if (httpStatus === 202 || (httpStatus >= 200 && httpStatus < 300)) {
-        const data = await response.json();
+        // Serasa returns 204 for a successful synchronous update. A 204 has
+        // no body, so attempting response.json() would turn that success into
+        // a false network failure.
+        const data = httpStatus === 204 ? undefined : await response.json();
         return {
           httpStatus,
           transactionId: data?.transactionId,

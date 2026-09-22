@@ -187,6 +187,24 @@ export class OperationProcessor extends WorkerHost {
         if (!debtId) return Promise.resolve();
         return this.prisma.contract.update({ where: { id: item.contractId }, data: { debtId } });
       }));
+    } else if (result.httpStatus >= 200 && result.httpStatus < 300) {
+      // A 204 is Serasa's synchronous confirmation for an existing debt
+      // update. There is no webhook to wait for in this case.
+      await this.prisma.providerOperationItem.updateMany({
+        where: {
+          operationId,
+          id: { in: items.map((i) => i.id) },
+        },
+        data: {
+          status: 'UPDATED',
+          attempts: { increment: 1 },
+          lastAttemptAt: new Date(),
+        },
+      });
+      await this.prisma.contract.updateMany({
+        where: { id: { in: items.map((i) => i.contractId) } },
+        data: { serasaStatus: 'UPDATED' },
+      });
     } else {
       // Error: mark items as FAILED
       await this.prisma.providerOperationItem.updateMany({
