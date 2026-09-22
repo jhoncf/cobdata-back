@@ -190,7 +190,7 @@ export class ReportsService {
     const where = {
       accountId,
       deletedAt: null,
-      cancellationReason: CancellationReason.CONTESTATION,
+      cancellationReason: { in: [CancellationReason.CONTESTATION, CancellationReason.PROCON, CancellationReason.RECLAME_AQUI] },
       cancelledAt: { gte: period.start, lt: period.end },
       ...(creditorId || walletId ? { wallet: { ...(creditorId ? { creditorId } : {}), ...(walletId ? { id: walletId } : {}) } } : {}),
     };

@@ -13,13 +13,13 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { OperationsService } from './operations.service';
-import { CreateOperationDto, ListOperationsDto, PreviewOperationDto } from './dto';
+import { CancelContractDto, CreateOperationDto, ListOperationsDto, PreviewOperationDto } from './dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit, CreditorPortalAccess } from '../common/decorators';
 import { AuthenticatedUser } from '../common/interfaces';
-import { InteractionChannel } from '@prisma/client';
+import { CancellationReason, InteractionChannel } from '@prisma/client';
 
 @ApiTags('Operations')
 @ApiBearerAuth('bearer')
@@ -93,18 +93,20 @@ export class OperationsController {
   @ApiOperation({ summary: 'Cancel a contract and remove it from active provider channels' })
   async cancelForCreditorPortal(
     @Param('contractId', ParseUUIDPipe) contractId: string,
+    @Body() dto: CancelContractDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    const reason = user.creditorId ? CancellationReason.CREDITOR_REQUEST : (dto.reason ?? CancellationReason.CREDITOR_REQUEST);
     return this.operationsService.cancelContract(
       contractId,
       user.id,
       user.accountId,
       user.creditorId,
-      user.creditorId ? {
+      {
+        reason,
         channel: InteractionChannel.WHATSAPP,
-        provider: 'CREDITOR_PORTAL',
-        summary: 'Contrato cancelado pelo credor via Portal CobCom.',
-      } : undefined,
+        provider: user.creditorId ? 'CREDITOR_PORTAL' : 'COBCOM_CRM',
+      },
     );
   }
 

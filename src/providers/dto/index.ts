@@ -5,3 +5,4 @@ export { CreateSerasaWalletDto, UpdateSerasaWalletDto } from './serasa-wallet.dt
 export { CreateOperationDto } from './create-operation.dto';
 export { ListOperationsDto } from './list-operations.dto';
 export { PreviewOperationDto } from './preview-operation.dto';
+export { CancelContractDto } from './cancel-contract.dto';

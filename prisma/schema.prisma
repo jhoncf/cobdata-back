@@ -70,6 +70,9 @@ enum ContractStatus {
 enum CancellationReason {
   CREDITOR_REQUEST
   CONTESTATION
+  PROCON
+  RECLAME_AQUI
+  EMAIL_REQUEST
 }
 
 enum ImportBatchStatus {

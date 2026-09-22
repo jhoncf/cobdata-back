@@ -27,6 +27,14 @@ import {
 // transactionId and therefore an unambiguous webhook correlation.
 const BATCH_SIZE = 1;
 
+const CANCELLATION_REASON_SUMMARIES: Record<CancellationReason, string> = {
+  [CancellationReason.CREDITOR_REQUEST]: 'Contrato baixado por solicitação do credor.',
+  [CancellationReason.CONTESTATION]: 'Contrato baixado por reclamação no chatbot.',
+  [CancellationReason.PROCON]: 'Contrato baixado por reclamação via Procon.',
+  [CancellationReason.RECLAME_AQUI]: 'Contrato baixado por reclamação via Reclame Aqui.',
+  [CancellationReason.EMAIL_REQUEST]: 'Contrato baixado por solicitação recebida por e-mail.',
+};
+
 /** SerasaStatus values eligible for CREATE_OR_UPDATE operations */
 const ELIGIBLE_FOR_CREATE: SerasaStatus[] = [
   SerasaStatus.NOT_ENABLED,
@@ -419,9 +427,7 @@ export class OperationsService {
     }
 
     const reason = cancellation.reason ?? CancellationReason.CREDITOR_REQUEST;
-    const summary = cancellation.summary ?? (reason === CancellationReason.CONTESTATION
-      ? 'Contrato baixado por reclamação no chatbot.'
-      : 'Contrato baixado por solicitação do credor.');
+    const summary = cancellation.summary ?? CANCELLATION_REASON_SUMMARIES[reason];
     const cancelledAt = new Date();
     await this.prisma.$transaction([
       this.prisma.contract.update({
