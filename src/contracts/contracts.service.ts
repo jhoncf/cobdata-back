@@ -37,7 +37,8 @@ export class ContractsService {
     private readonly deduplicationService: DeduplicationService,
   ) {}
 
-  private calculateAgingDays(occurrenceDate: Date): number {
+  /** Aging is the number of calendar days the invoice has been overdue. */
+  private calculateAgingDays(dueDate: Date): number {
     const dateParts = (date: Date) => {
       const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -45,7 +46,7 @@ export class ContractsService {
       const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
       return Date.UTC(part('year'), part('month') - 1, part('day'));
     };
-    return Math.max(0, Math.floor((dateParts(new Date()) - dateParts(occurrenceDate)) / 86_400_000));
+    return Math.max(0, Math.floor((dateParts(new Date()) - dateParts(dueDate)) / 86_400_000));
   }
 
   private applyNumericComparison(
@@ -149,7 +150,7 @@ export class ContractsService {
       : null;
 
     const cancelledAt = dto.cancelledAt ? new Date(dto.cancelledAt) : null;
-    const agingDays = this.calculateAgingDays(occurrenceDate);
+    const agingDays = this.calculateAgingDays(dueDate ?? occurrenceDate);
     const ceilingBand = wallet.creditor.discountBands.find((band) =>
       band.minAgingDays <= agingDays && (band.maxAgingDays === null || band.maxAgingDays >= agingDays),
     );
@@ -805,7 +806,7 @@ export class ContractsService {
     }
 
     const offerWalletId = dto.walletId ?? contract.walletId;
-    const mustRecalculateOffer = dto.updatedValue !== undefined || dto.walletId !== undefined || dto.occurrenceDate !== undefined || dto.offerDiscountPercent !== undefined;
+    const mustRecalculateOffer = dto.updatedValue !== undefined || dto.walletId !== undefined || dto.occurrenceDate !== undefined || dto.dueDate !== undefined || dto.offerDiscountPercent !== undefined;
     const offerWallet = mustRecalculateOffer
       ? await this.prisma.wallet.findFirst({
         where: { id: offerWalletId, accountId, deletedAt: null },
@@ -892,8 +893,8 @@ export class ContractsService {
       }
       if (!offerWallet) throw new UnprocessableEntityException('Carteira comercial não encontrada.');
 
-      const occurrenceDate = dto.occurrenceDate ? new Date(dto.occurrenceDate) : contract.occurrenceDate;
-      const agingDays = this.calculateAgingDays(occurrenceDate);
+      const dueDate = dto.dueDate ? new Date(dto.dueDate) : (contract.dueDate ?? contract.occurrenceDate);
+      const agingDays = this.calculateAgingDays(dueDate);
       const band = offerWallet.creditor.discountBands.find((item) =>
         item.minAgingDays <= agingDays && (item.maxAgingDays === null || item.maxAgingDays >= agingDays),
       );

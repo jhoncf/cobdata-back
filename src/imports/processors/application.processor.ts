@@ -123,7 +123,8 @@ export class ApplicationProcessor extends WorkerHost {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  private static calculateAgingDays(occurrenceDate: Date): number {
+  /** Aging measures overdue invoice days, therefore it is based on dueDate. */
+  private static calculateAgingDays(dueDate: Date): number {
     const dateParts = (date: Date) => {
       const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -131,7 +132,7 @@ export class ApplicationProcessor extends WorkerHost {
       const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
       return Date.UTC(part('year'), part('month') - 1, part('day'));
     };
-    return Math.max(0, Math.floor((dateParts(new Date()) - dateParts(occurrenceDate)) / 86_400_000));
+    return Math.max(0, Math.floor((dateParts(new Date()) - dateParts(dueDate)) / 86_400_000));
   }
 
   constructor(
@@ -228,7 +229,7 @@ export class ApplicationProcessor extends WorkerHost {
             ignoredCount++;
             continue;
           }
-          const agingDays = ApplicationProcessor.calculateAgingDays(occurrenceDate);
+          const agingDays = ApplicationProcessor.calculateAgingDays(dueDate ?? occurrenceDate);
 
           // Compute deduplication key
           const deduplicationKey =

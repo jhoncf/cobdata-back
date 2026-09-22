@@ -82,7 +82,7 @@ export class BulkTransferContractFiltersDto {
   @IsIn(['gt', 'lt', 'eq'])
   agingOperator?: 'gt' | 'lt' | 'eq';
 
-  @ApiPropertyOptional({ description: 'Dias desde a data de ocorrência' })
+  @ApiPropertyOptional({ description: 'Dias desde o vencimento da fatura' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

@@ -387,7 +387,7 @@ export class WalletsService implements OnModuleDestroy {
       UPDATE "Contract"
       SET "agingDays" = GREATEST(
         0,
-        ((NOW() AT TIME ZONE 'America/Sao_Paulo')::date - ("occurrenceDate" AT TIME ZONE 'America/Sao_Paulo')::date)
+        ((NOW() AT TIME ZONE 'America/Sao_Paulo')::date - (COALESCE("dueDate", "occurrenceDate") AT TIME ZONE 'America/Sao_Paulo')::date)
       )
       WHERE "deletedAt" IS NULL
     `);
