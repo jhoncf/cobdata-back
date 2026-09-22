@@ -254,6 +254,7 @@ export class OperationsService {
     userId: string,
     accountId: string,
     action: OperationAction = OperationAction.CREATE_OR_UPDATE,
+    allowRegisteredUpdate = false,
   ) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, accountId, deletedAt: null, status: ContractStatus.ACTIVE },
@@ -266,12 +267,16 @@ export class OperationsService {
     const provider = await this.getSerasaProvider(accountId);
     const eligibleStatuses = action === OperationAction.REMOVE
       ? [...ELIGIBLE_FOR_REMOVE, SerasaStatus.SENT]
-      : ELIGIBLE_FOR_CREATE;
+      : allowRegisteredUpdate
+        ? [...ELIGIBLE_FOR_CREATE, SerasaStatus.REGISTERED, SerasaStatus.UPDATED]
+        : ELIGIBLE_FOR_CREATE;
     if (!eligibleStatuses.includes(contract.serasaStatus)) {
       throw new ConflictException(
         action === OperationAction.REMOVE
           ? 'Este contrato não está elegível para remoção da Serasa'
-          : 'Este contrato já está sincronizado ou não é elegível para envio à Serasa',
+          : allowRegisteredUpdate
+            ? 'Este contrato não está elegível para atualização na Serasa'
+            : 'Este contrato já está sincronizado ou não é elegível para envio à Serasa',
       );
     }
     if (action === OperationAction.REMOVE && !contract.debtId) {

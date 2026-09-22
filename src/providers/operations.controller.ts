@@ -61,6 +61,24 @@ export class OperationsController {
     return this.operationsService.createForContract(contractId, user.id, user.accountId);
   }
 
+  @Post('contracts/:contractId/update')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: 'CONTRACT_UPDATE_SERASA', resourceType: 'Contract' })
+  @ApiOperation({ summary: 'Atualizar um contrato já registrado na Serasa' })
+  async updateForContract(
+    @Param('contractId', ParseUUIDPipe) contractId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.operationsService.createForContract(
+      contractId,
+      user.id,
+      user.accountId,
+      'CREATE_OR_UPDATE',
+      true,
+    );
+  }
+
   @Post('contracts/:contractId/remove')
   @Roles('ADMIN', 'OPERATIONAL')
   @HttpCode(HttpStatus.CREATED)
