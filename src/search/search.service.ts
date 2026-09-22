@@ -116,9 +116,10 @@ export class SearchService {
       { contractNumber: { contains: term, mode: 'insensitive' } },
     ];
 
-    // CPF lookup remains exact (and uses the hash when available), while a
-    // contract number supports the normal partial search used by the header.
-    if (digitsOnly.length === 11) {
+    // CPF and CNPJ lookups remain exact (and use the hash when available),
+    // while a contract number supports the normal partial search used by the
+    // header. Both document types are stored in debtorDocument.
+    if (digitsOnly.length === 11 || digitsOnly.length === 14) {
       const hash = createHash('sha256').update(digitsOnly).digest('hex');
       contractConditions.push(
         { debtorDocumentHash: hash },
