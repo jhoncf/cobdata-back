@@ -139,7 +139,7 @@ export class PaymentChargesController {
       user.accountId,
       user.id,
       requestId,
-      { agreementAmountOnly: true, creditorId: user.creditorId },
+      { agreementAmountOnly: true, creditorId: user.creditorId ?? undefined },
     );
     return GeneratePixResponseDto.fromEntity(charge);
   }
