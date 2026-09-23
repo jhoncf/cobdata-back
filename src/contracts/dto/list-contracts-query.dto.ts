@@ -135,8 +135,8 @@ export class ListContractsQueryDto extends PaginationDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['contractNumber', 'debtorDocument', 'originalValue', 'updatedValue', 'offerValue', 'status', 'paymentStatus', 'serasaStatus', 'occurrenceDate', 'agingDays'])
-  sortBy?: 'contractNumber' | 'debtorDocument' | 'originalValue' | 'updatedValue' | 'offerValue' | 'status' | 'paymentStatus' | 'serasaStatus' | 'occurrenceDate' | 'agingDays';
+  @IsIn(['contractNumber', 'debtorName', 'debtorDocument', 'debtType', 'originalValue', 'updatedValue', 'offerValue', 'offerDiscountPercent', 'status', 'paymentStatus', 'serasaStatus', 'occurrenceDate', 'agreementCreatedAt', 'agreementTotalAmount', 'cancelledAt', 'agingDays'])
+  sortBy?: 'contractNumber' | 'debtorName' | 'debtorDocument' | 'debtType' | 'originalValue' | 'updatedValue' | 'offerValue' | 'offerDiscountPercent' | 'status' | 'paymentStatus' | 'serasaStatus' | 'occurrenceDate' | 'agreementCreatedAt' | 'agreementTotalAmount' | 'cancelledAt' | 'agingDays';
 
   @IsOptional()
   @IsIn(['asc', 'desc'])
