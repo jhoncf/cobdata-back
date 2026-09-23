@@ -523,7 +523,11 @@ export class ContractsService {
       const portalSearch = search?.trim() ?? '';
       const isCancelledPortalList = status === ContractStatus.CANCELLED;
       const isPaidPortalList = paymentStatus === PaymentStatus.PAID;
-      if (portalCreditorId && !isCancelledPortalList && !isPaidPortalList && portalDocument.length !== 11 && portalSearch.length < 3) {
+      // The creditor portal may browse its own agreement report by date. It
+      // remains constrained by `wallet.creditorId` above; only the general
+      // contracts screen requires an explicit CPF or contract lookup.
+      const isAgreementPortalList = agreementOnly === true;
+      if (portalCreditorId && !isCancelledPortalList && !isPaidPortalList && !isAgreementPortalList && portalDocument.length !== 11 && portalSearch.length < 3) {
       return {
         data: [],
         meta: { total: 0, page, limit, totalPages: 0 },
