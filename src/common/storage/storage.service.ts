@@ -18,19 +18,25 @@ export class StorageService implements OnModuleInit {
 
   constructor(private readonly configService: ConfigService) {
     this.bucket = this.configService.get<string>('S3_BUCKET')!;
+    const provider = this.configService.get<string>('STORAGE_PROVIDER') ?? 'minio';
     const endpoint = this.configService.get<string>('S3_ENDPOINT')!;
     const port = this.configService.get<number>('S3_PORT')!;
     const useSsl = this.configService.get<boolean>('S3_USE_SSL')!;
 
-    this.s3Client = new S3Client({
-      endpoint: `${useSsl ? 'https' : 'http'}://${endpoint}:${port}`,
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: this.configService.get<string>('S3_ACCESS_KEY')!,
-        secretAccessKey: this.configService.get<string>('S3_SECRET_KEY')!,
-      },
-      forcePathStyle: true,
-    });
+    // MinIO remains S3-compatible, while AWS uses the instance IAM Role via
+    // the SDK's default credential chain. Do not pass MinIO root credentials
+    // to AWS S3 when both services share the production environment.
+    this.s3Client = new S3Client(provider === 'aws'
+      ? { region: this.configService.get<string>('AWS_REGION') ?? 'us-east-1' }
+      : {
+        endpoint: `${useSsl ? 'https' : 'http'}://${endpoint}:${port}`,
+        region: 'us-east-1',
+        credentials: {
+          accessKeyId: this.configService.get<string>('S3_ACCESS_KEY')!,
+          secretAccessKey: this.configService.get<string>('S3_SECRET_KEY')!,
+        },
+        forcePathStyle: true,
+      });
   }
 
   async onModuleInit(): Promise<void> {

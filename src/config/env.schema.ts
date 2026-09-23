@@ -35,6 +35,7 @@ export const envSchema = z.object({
   S3_SECRET_KEY: z.string(),
   S3_BUCKET: z.string().default('cobdata-imports'),
   S3_USE_SSL: z.string().default('false').transform(v => v === 'true'),
+  STORAGE_PROVIDER: z.enum(['minio', 'aws']).default('minio'),
 
   // Serasa
   SERASA_API_URL: z.string().url().optional(),
