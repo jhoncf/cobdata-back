@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
+import * as XLSX from 'xlsx';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
@@ -67,10 +68,11 @@ export class ContractsController {
   @Get('export')
   @CreditorPortalAccess()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Export filtered contracts as CSV' })
-  @ApiResponse({ status: 200, description: 'CSV file containing every contract that matches the filters' })
+  @ApiOperation({ summary: 'Export filtered contracts as CSV or XLSX' })
+  @ApiResponse({ status: 200, description: 'File containing every contract that matches the filters' })
   async export(
     @Query() query: ListContractsQueryDto,
+    @Query('format') format: 'csv' | 'xlsx' = 'csv',
     @CurrentUser() user: AuthenticatedUser,
     @Req() req: any,
     @Res() res: Response,
@@ -96,7 +98,7 @@ export class ContractsController {
         ? ''
         : date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
     };
-    const rows = contracts.map((contract) => [
+    const rowValues = contracts.map((contract) => [
       contract.contractNumber,
       contract.debtorDocument,
       contract.debtorName,
@@ -113,9 +115,32 @@ export class ContractsController {
       contract.agingDays,
       contract.debtId,
       contract.agreementReference,
-    ].map(escapeCsv).join(';'));
+    ]);
+
+    const columns = ['Nº Contrato', 'Documento', 'Nome do devedor', 'Telefone', 'E-mail', 'Valor original', 'Valor atualizado', 'Valor da oferta', 'Desconto da oferta (%)', 'Situação', 'Status financeiro', 'Status Serasa', 'Data de vencimento', 'Aging (dias)', 'Debt ID Serasa', 'Agreement ID Serasa'];
+    if (format === 'xlsx') {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        columns,
+        ...rowValues.map((row) => row.map((value, index) => (
+          [5, 6, 7].includes(index) ? Number(String(value ?? '0').replace(',', '.')) : value ?? ''
+        ))),
+      ]);
+      sheet['!cols'] = [
+        { wch: 18 }, { wch: 18 }, { wch: 32 }, { wch: 18 }, { wch: 30 },
+        { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 22 }, { wch: 14 },
+        { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 38 }, { wch: 38 },
+      ];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, 'Contratos');
+      const output = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="contratos.xlsx"');
+      res.send(output);
+      return;
+    }
+    const rows = rowValues.map((row) => row.map(escapeCsv).join(';'));
     const csv = [
-      'Nº Contrato;Documento;Nome do devedor;Telefone;E-mail;Valor original;Valor atualizado;Valor da oferta;Desconto da oferta (%);Situação;Status financeiro;Status Serasa;Data de vencimento;Aging (dias);Debt ID Serasa;Agreement ID Serasa',
+      columns.join(';'),
       ...rows,
     ].join('\r\n');
 
