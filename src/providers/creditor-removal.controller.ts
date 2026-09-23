@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -18,20 +18,26 @@ export class CreditorRemovalController {
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Preview creditor-owned contracts for cancellation' })
+  @ApiOperation({ summary: 'Upload a creditor removal file and queue its background validation' })
   preview(@UploadedFile() file: Express.Multer.File, @Body('columnMapping') mapping: string | undefined, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.preview(file, mapping, user.accountId, user.creditorId);
+    return this.service.createPreview(file, mapping, user.accountId, user.id, user.creditorId);
   }
 
-  @Post('confirm')
+  @Get('batches')
+  @Roles('VIEWER')
+  @CreditorPortalAccess()
+  @ApiOperation({ summary: 'List background validation and removal batches for the creditor' })
+  list(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.list(user.accountId, user.creditorId);
+  }
+
+  @Post(':batchId/confirm')
   @Roles('VIEWER')
   @CreditorPortalAccess()
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(FileInterceptor('file'))
   @Audit({ action: 'CREDITOR_BULK_CONTRACT_CANCEL', resourceType: 'Contract' })
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Cancel matched creditor-owned contracts and queue removal from active channels' })
-  confirm(@UploadedFile() file: Express.Multer.File, @Body('columnMapping') mapping: string | undefined, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.confirm(file, mapping, user.accountId, user.id, user.creditorId);
+  @ApiOperation({ summary: 'Confirm a validated batch and queue cancellation in the background' })
+  confirm(@Param('batchId', ParseUUIDPipe) batchId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.confirm(batchId, user.accountId, user.creditorId);
   }
 }

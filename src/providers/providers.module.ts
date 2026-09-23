@@ -15,13 +15,14 @@ import { SerasaWalletsController } from './serasa-wallets.controller';
 import { SerasaWalletsService } from './serasa-wallets.service';
 import { CreditorRemovalController } from './creditor-removal.controller';
 import { CreditorRemovalService } from './creditor-removal.service';
+import { CreditorRemovalProcessor } from './processors/creditor-removal.processor';
 import { QUEUES } from '../common/constants/queues';
 import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
     forwardRef(() => PaymentsModule),
-    BullModule.registerQueue({ name: QUEUES.PROVIDER_OPERATION }),
+    BullModule.registerQueue({ name: QUEUES.PROVIDER_OPERATION }, { name: QUEUES.CREDITOR_REMOVAL }),
   ],
   controllers: [ProvidersController, WalletMappingsController, OperationsController, WebhooksController, SerasaWalletsController, CreditorRemovalController],
   providers: [
@@ -34,6 +35,7 @@ import { PaymentsModule } from '../payments/payments.module';
     CryptoService,
     SerasaWalletsService,
     CreditorRemovalService,
+    CreditorRemovalProcessor,
   ],
   exports: [ProvidersService, WalletMappingsService, OperationsService, SerasaLnopAdapter, WebhooksService, SerasaWalletsService],
 })

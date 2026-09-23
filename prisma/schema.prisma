@@ -135,6 +135,15 @@ enum InteractionChannel {
   PAYMENT
 }
 
+enum CreditorRemovalBatchStatus {
+  PENDING_VALIDATION
+  VALIDATING
+  READY
+  APPLYING
+  COMPLETED
+  FAILED
+}
+
 enum InteractionStatus {
   QUEUED
   SENT
@@ -760,6 +769,35 @@ model ImportBatchError {
   batch ImportBatch @relation(fields: [batchId], references: [id])
 
   @@index([batchId])
+}
+
+// A creditor portal upload is persisted before it is checked. Both the
+// validation and the eventual cancellation run in BullMQ, so large files never
+// depend on an open browser request.
+model CreditorRemovalBatch {
+  id                     String                     @id @default(uuid())
+  accountId              String
+  creditorId             String
+  userId                 String
+  fileName               String
+  fileUrl                String
+  columnMapping          Json
+  contractIds            Json?
+  status                 CreditorRemovalBatchStatus @default(PENDING_VALIDATION)
+  totalLines             Int                        @default(0)
+  validLines             Int                        @default(0)
+  invalidLines           Int                        @default(0)
+  matchedCount           Int                        @default(0)
+  unmatchedCount         Int                        @default(0)
+  blockedCount           Int                        @default(0)
+  duplicateLines         Int                        @default(0)
+  cancelledCount         Int                        @default(0)
+  queuedForSerasaRemoval Int                        @default(0)
+  errorMessage           String?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  @@index([accountId, creditorId, createdAt])
 }
 
 // ============ PROVIDERS ============
