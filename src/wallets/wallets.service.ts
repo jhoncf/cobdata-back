@@ -105,7 +105,7 @@ export class WalletsService implements OnModuleDestroy {
     accountId: string,
     userScopes?: string[],
   ): Promise<PaginatedResponse<Wallet>> {
-    const { page, limit, search, creditorId } = query;
+    const { page, limit, search, creditorId, status, sortBy = 'createdAt', sortDirection = 'desc' } = query;
     const cacheKey = this.getListCacheKey(accountId, query, userScopes);
     const cached = await this.getCachedList(cacheKey);
     if (cached) return cached;
@@ -123,6 +123,7 @@ export class WalletsService implements OnModuleDestroy {
     if (creditorId) {
       where.creditorId = creditorId;
     }
+    if (status) where.status = status;
 
     // VIEWER scope filtering: only wallets in user's scopes
     if (userScopes) {
@@ -134,7 +135,7 @@ export class WalletsService implements OnModuleDestroy {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [sortBy]: sortDirection },
         include: {
           creditor: { select: { id: true, name: true } },
           _count: {
