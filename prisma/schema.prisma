@@ -201,6 +201,8 @@ model Account {
   walletEmailTemplates     WalletEmailTemplate[]
   apiKeys                  ApiKey[]
   creditorIntegrations     CreditorIntegration[]
+  communicationRules       CommunicationRule[]
+  communicationTemplates   CommunicationTemplate[]
 }
 
 model ApiKey {
@@ -415,6 +417,72 @@ model Wallet {
   contractInteractions ContractInteraction[]
   publicDebtAccessLinks PublicDebtAccessLink[]
   emailTemplates       WalletEmailTemplate[]
+  communicationRules   CommunicationRule[]
+  communicationTemplates CommunicationTemplate[]
+}
+
+/// Automated, wallet-scoped flow.  The schedule and filters deliberately stay
+/// structured JSON so new conditions can be introduced without a migration.
+model CommunicationRule {
+  id              String   @id @default(uuid())
+  accountId       String
+  walletId        String
+  createdByUserId String
+  name            String
+  active          Boolean  @default(true)
+  schedule        Json
+  conditions      Json
+  channel         String
+  templateId      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  account Account                @relation(fields: [accountId], references: [id])
+  wallet  Wallet                 @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  template CommunicationTemplate @relation(fields: [templateId], references: [id])
+  runs    CommunicationRuleRun[]
+
+  @@index([accountId, walletId, active])
+}
+
+/// A reusable content block for SMS, e-mail or the per-call IA instruction.
+/// A null wallet makes it an account-wide system template.
+model CommunicationTemplate {
+  id        String   @id @default(uuid())
+  accountId String
+  walletId  String?
+  channel   String
+  name      String
+  content   String   @db.Text
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account             @relation(fields: [accountId], references: [id])
+  wallet  Wallet?             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  rules   CommunicationRule[]
+
+  @@index([accountId, walletId, channel])
+}
+
+/// Durable schedule lock and audit record. The unique pair makes a rule
+/// idempotent even if an instance restarts while the minute is being handled.
+model CommunicationRuleRun {
+  id           String   @id @default(uuid())
+  ruleId       String
+  scheduledFor DateTime
+  status       String   @default("RUNNING")
+  matchedCount Int      @default(0)
+  sentCount    Int      @default(0)
+  failedCount  Int      @default(0)
+  error        String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  rule CommunicationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, scheduledFor])
+  @@index([ruleId, scheduledFor])
 }
 
 /// Wallet strategy by aging range. The creditor policy remains the live ceiling;

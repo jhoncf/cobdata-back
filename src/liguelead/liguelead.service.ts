@@ -169,7 +169,7 @@ export class LigueLeadService {
     return { processed, skipped };
   }
 
-  async sendCalls(walletId: string, accountId: string, userId: string, dto: SendLigueLeadCallsDto, scopes?: string[]) {
+  async sendCalls(walletId: string, accountId: string, userId: string, dto: SendLigueLeadCallsDto, scopes?: string[], communicationInstruction?: string) {
     const wallet = await this.wallet(walletId, accountId, scopes);
     const agent = await this.prisma.ligueLeadWalletAgent.findUnique({ where: { walletId } });
     if (!agent?.active) throw new BadRequestException('Configure e ative o agente de IA desta carteira antes de disparar ligações');
@@ -179,7 +179,7 @@ export class LigueLeadService {
       voice_agent_id: agent.externalId,
       phones: contracts.map((contract) => ({
         phone: this.normalizePhone(contract.debtorPhone!),
-        call_context: this.callContext(contract, wallet.creditor?.name),
+        call_context: this.callContext(contract, wallet.creditor?.name, communicationInstruction),
       })),
       ...(dto.retryAttempts
         ? { retry_attempts: dto.retryAttempts, retry_interval_min: dto.retryIntervalMin ?? 30 }
@@ -252,7 +252,7 @@ export class LigueLeadService {
     contractNumber: string; debtorName: string | null; debtorDocument: string;
     updatedValue: unknown; offerValue: unknown; offerDiscountPercent: unknown; dueDate: Date | null;
     debtOrigin: string | null; productName: string | null;
-  }, creditorName?: string | null) {
+  }, creditorName?: string | null, communicationInstruction?: string) {
     const offerValue = contract.offerValue ?? contract.updatedValue;
     const discountPercent = Number(contract.offerDiscountPercent ?? 0);
     const discountSpeech = Number.isInteger(discountPercent)
@@ -275,6 +275,7 @@ export class LigueLeadService {
       `Vencimento: ${dueDate}`,
       contract.debtOrigin?.trim() ? `Origem: ${contract.debtOrigin.trim()}` : null,
       contract.productName?.trim() ? `Produto ou serviço: ${contract.productName.trim()}` : null,
+      communicationInstruction?.trim() ? `INSTRUÇÃO DESTA CAMPANHA: ${communicationInstruction.trim()}` : null,
       `Confirmação de identidade: peça somente os quatro primeiros dígitos do CPF. Valor esperado internamente: ${this.spellDigits(contract.debtorDocument.slice(0, 4))}. Nunca peça, informe ou repita o CPF completo. Só revele detalhes após a coincidência; após duas tentativas incorretas, encerre sem revelar informações.`,
     ].filter(Boolean).join('; ');
     return details.replace(/\s+/g, ' ').trim().slice(0, 1500);

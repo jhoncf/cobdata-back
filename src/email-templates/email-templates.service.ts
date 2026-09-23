@@ -146,6 +146,42 @@ export class EmailTemplatesService {
     }
   }
 
+  /** Sends the text configured in an automated communication rule while
+   * preserving the same access link, tracking pixel and contract history as a
+   * normal e-mail template dispatch. */
+  async sendRuleEmail(walletId: string, accountId: string, templateName: string, content: string, contractId: string) {
+    const [wallet, contract] = await Promise.all([
+      this.wallet(walletId, accountId),
+      this.prisma.contract.findFirst({ where: { id: contractId, walletId, accountId, deletedAt: null } }),
+    ]);
+    if (!contract?.debtorEmail) throw new BadRequestException('O contrato não possui e-mail cadastrado');
+    if (contract.status !== 'ACTIVE' || contract.paymentStatus === 'PAID') throw new BadRequestException('O contrato não está elegível para comunicação');
+    const interaction = await this.prisma.contractInteraction.create({ data: { accountId, walletId, contractId, channel: 'EMAIL', status: 'QUEUED', provider: 'AWS_SES', contact: contract.debtorEmail, summary: `E-mail preparado pela regra: ${templateName}`, payload: { communicationTemplateName: templateName } } });
+    const [open, click, access] = await this.prisma.$transaction(async (tx) => {
+      const open = await tx.emailTrackingLink.create({ data: { token: randomUUID(), interactionId: interaction.id, kind: 'OPEN' } });
+      const click = await tx.emailTrackingLink.create({ data: { token: randomUUID(), interactionId: interaction.id, kind: 'CLICK' } });
+      const access = await tx.publicDebtAccessLink.create({ data: { token: randomUUID(), accountId, walletId, contractId, interactionId: interaction.id, expiresAt: new Date(Date.now() + 7 * 86400000) } });
+      return [open, click, access] as const;
+    });
+    const appUrl = this.config.get<string>('FRONTEND_URL')!.replace(/\/$/, '');
+    const apiUrl = this.config.get<string>('PUBLIC_API_URL') || `${appUrl}/api`;
+    const paymentUrl = `${appUrl}/regularize?access=${encodeURIComponent(access.token)}`;
+    const clickUrl = `${apiUrl}/email/tracking/click/${click.token}?to=${encodeURIComponent(paymentUrl)}`;
+    const button = `<div style="text-align:center;margin:24px 0"><a href="${clickUrl}" style="display:inline-block;background:#155dfc;color:#fff;text-decoration:none;font:600 16px Arial,sans-serif;padding:15px 24px;border-radius:8px">Ver oferta e gerar Pix</a></div>`;
+    const vars: Record<string, string> = { '{{nome_devedor}}': contract.debtorName || 'Cliente', '{{devedor_nome}}': contract.debtorName || 'Cliente', '{{credor}}': wallet.creditor.name, '{{credor_nome}}': wallet.creditor.name, '{{contrato}}': contract.contractNumber, '{{numero_contrato}}': contract.contractNumber, '{{valor_oferta}}': Number(contract.offerValue ?? contract.updatedValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), '{{link_pagamento}}': button, '{{botao_pagamento}}': button };
+    const replace = (value: string) => Object.entries(vars).reduce((text, [key, replacement]) => text.replaceAll(key, replacement), value);
+    const escaped = replace(content).replace(/\n/g, '<br/>');
+    const html = `<!doctype html><html><body style="margin:0;background:#eef3fb"><table role="presentation" width="100%"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:600px;background:#fff;border-radius:16px"><tr><td style="padding:22px 32px;background:#0f4eea;color:#fff;font:700 20px Arial,sans-serif">CobCom</td></tr><tr><td style="padding:36px 32px;color:#1d2939;font:16px Arial,sans-serif;line-height:1.65">${escaped}</td></tr><tr><td style="padding:20px 32px;background:#f8fafc;color:#667085;font:12px Arial,sans-serif">COBCOM SOLUCOES LTDA · CNPJ 50.703.286/0001-40</td></tr></table></td></tr></table><img src="${apiUrl}/email/tracking/open/${open.token}.gif" width="1" height="1" alt="" style="display:none"/></body></html>`;
+    try {
+      await this.email.send({ to: contract.debtorEmail, subject: `Oferta disponível — ${wallet.creditor.name}`, text: replace(content).replace(/<[^>]*>/g, ' '), html });
+      await this.prisma.contractInteraction.update({ where: { id: interaction.id }, data: { status: 'SENT', summary: `E-mail enviado pela regra: ${templateName}` } });
+      return { id: interaction.id };
+    } catch (error: any) {
+      await this.prisma.contractInteraction.update({ where: { id: interaction.id }, data: { status: 'FAILED', summary: `Falha no e-mail da regra: ${error?.message || 'erro do SES'}` } });
+      throw error;
+    }
+  }
+
   async mark(token: string, kind: 'OPEN' | 'CLICK') {
     const link = await this.prisma.emailTrackingLink.findUnique({ where: { token }, include: { interaction: true } });
     if (!link || link.kind !== kind) throw new NotFoundException();

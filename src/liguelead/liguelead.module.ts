@@ -5,5 +5,5 @@ import { QUEUES } from '../common/constants/queues';
 import { LigueLeadSmsProcessor } from './liguelead-sms.processor';
 import { LigueLeadController } from './liguelead.controller';
 import { LigueLeadService } from './liguelead.service';
-@Module({ imports: [ContractsModule, BullModule.registerQueue({ name: QUEUES.LIGUELEAD_SMS })], controllers: [LigueLeadController], providers: [LigueLeadService, LigueLeadSmsProcessor] })
+@Module({ imports: [ContractsModule, BullModule.registerQueue({ name: QUEUES.LIGUELEAD_SMS })], controllers: [LigueLeadController], providers: [LigueLeadService, LigueLeadSmsProcessor], exports: [LigueLeadService] })
 export class LigueLeadModule {}

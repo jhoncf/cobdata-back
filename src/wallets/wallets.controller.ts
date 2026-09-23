@@ -11,6 +11,8 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
@@ -20,12 +22,109 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators';
 import { AuthenticatedUser } from '../common/interfaces';
 import { Request } from 'express';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Wallets')
 @ApiBearerAuth('bearer')
 @Controller()
 export class WalletsController {
-  constructor(private readonly walletsService: WalletsService) {}
+  constructor(
+    private readonly walletsService: WalletsService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  private async assertWallet(id: string, accountId: string) {
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id, accountId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!wallet) throw new NotFoundException('Carteira não encontrada');
+  }
+
+  @Get('wallets/:id/communication/templates')
+  async communicationTemplates(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    await this.assertWallet(id, user.accountId);
+    return this.prisma.communicationTemplate.findMany({
+      where: { accountId: user.accountId, OR: [{ walletId: id }, { walletId: null, isDefault: true }] },
+      orderBy: [{ channel: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  @Post('wallets/:id/communication/templates')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @Audit({ action: 'COMMUNICATION_TEMPLATE_CREATE', resourceType: 'Wallet' })
+  async createCommunicationTemplate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { channel: string; name: string; content: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.assertWallet(id, user.accountId);
+    if (!['SMS', 'EMAIL', 'AI_VOICE_CALL'].includes(body.channel) || !body.name?.trim() || !body.content?.trim()) {
+      throw new BadRequestException('Canal, nome e conteúdo são obrigatórios');
+    }
+    return this.prisma.communicationTemplate.create({
+      data: { accountId: user.accountId, walletId: id, channel: body.channel, name: body.name.trim().slice(0, 120), content: body.content.trim() },
+    });
+  }
+
+  @Post('wallets/:id/communication/templates/:templateId/export-default')
+  @Roles('ADMIN', 'OPERATIONAL')
+  async exportCommunicationTemplate(@Param('id', ParseUUIDPipe) id: string, @Param('templateId', ParseUUIDPipe) templateId: string, @CurrentUser() user: AuthenticatedUser) {
+    await this.assertWallet(id, user.accountId);
+    const template = await this.prisma.communicationTemplate.findFirst({ where: { id: templateId, accountId: user.accountId, walletId: id } });
+    if (!template) throw new NotFoundException('Template não encontrado');
+    return this.prisma.communicationTemplate.create({ data: { accountId: user.accountId, channel: template.channel, name: `${template.name} (padrão)`, content: template.content, isDefault: true } });
+  }
+
+  @Get('wallets/:id/communication/rules')
+  async communicationRules(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    await this.assertWallet(id, user.accountId);
+    return this.prisma.communicationRule.findMany({ where: { accountId: user.accountId, walletId: id }, include: { template: true }, orderBy: { createdAt: 'desc' } });
+  }
+
+  @Post('wallets/:id/communication/rules')
+  @Roles('ADMIN', 'OPERATIONAL')
+  @Audit({ action: 'COMMUNICATION_RULE_CREATE', resourceType: 'Wallet' })
+  async createCommunicationRule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { name: string; schedule: Record<string, unknown>; conditions: Array<Record<string, unknown>>; channel: string; templateId: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.assertWallet(id, user.accountId);
+    const frequency = String(body.schedule?.frequency);
+    const time = String(body.schedule?.time);
+    if (!body.name?.trim() || !['DAILY', 'WEEKLY'].includes(frequency) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !Array.isArray(body.conditions) || body.conditions.length > 20 || !['SMS', 'EMAIL', 'AI_VOICE_CALL'].includes(body.channel)) {
+      throw new BadRequestException('A regra de comunicação está inválida');
+    }
+    for (const condition of body.conditions) {
+      if (!['paymentStatus', 'offerValue', 'agingDays'].includes(String(condition.field)) || !['eq', 'gt', 'lt'].includes(String(condition.operator)) || condition.value === undefined || condition.value === null) throw new BadRequestException('Condição de comunicação inválida');
+      if (condition.field === 'paymentStatus' && !['OPEN', 'IN_AGREEMENT', 'INSTALLMENT', 'AGREEMENT_BREACHED', 'PAID'].includes(String(condition.value))) throw new BadRequestException('Status financeiro inválido');
+      if (condition.field !== 'paymentStatus' && (!Number.isFinite(Number(condition.value)) || Number(condition.value) < 0)) throw new BadRequestException('Condições numéricas devem ser positivas');
+    }
+    const template = await this.prisma.communicationTemplate.findFirst({ where: { id: body.templateId, accountId: user.accountId, channel: body.channel, OR: [{ walletId: id }, { walletId: null, isDefault: true }] } });
+    if (!template) throw new BadRequestException('Escolha um template válido para este canal');
+    return this.prisma.communicationRule.create({ data: { accountId: user.accountId, walletId: id, createdByUserId: user.id, name: body.name.trim().slice(0, 120), schedule: body.schedule as Prisma.InputJsonValue, conditions: body.conditions as Prisma.InputJsonValue, channel: body.channel, templateId: template.id }, include: { template: true } });
+  }
+
+  @Patch('wallets/:id/communication/rules/:ruleId')
+  @Roles('ADMIN', 'OPERATIONAL')
+  async updateCommunicationRule(@Param('id', ParseUUIDPipe) id: string, @Param('ruleId', ParseUUIDPipe) ruleId: string, @Body() body: { active?: boolean; name?: string }, @CurrentUser() user: AuthenticatedUser) {
+    await this.assertWallet(id, user.accountId);
+    const rule = await this.prisma.communicationRule.findFirst({ where: { id: ruleId, accountId: user.accountId, walletId: id } });
+    if (!rule) throw new NotFoundException('Regra não encontrada');
+    return this.prisma.communicationRule.update({ where: { id: ruleId }, data: { ...(body.active !== undefined ? { active: body.active } : {}), ...(body.name ? { name: body.name.trim().slice(0, 120) } : {}) }, include: { template: true } });
+  }
+
+  @Delete('wallets/:id/communication/rules/:ruleId')
+  @Roles('ADMIN', 'OPERATIONAL')
+  async deleteCommunicationRule(@Param('id', ParseUUIDPipe) id: string, @Param('ruleId', ParseUUIDPipe) ruleId: string, @CurrentUser() user: AuthenticatedUser) {
+    await this.assertWallet(id, user.accountId);
+    const rule = await this.prisma.communicationRule.findFirst({ where: { id: ruleId, accountId: user.accountId, walletId: id } });
+    if (!rule) throw new NotFoundException('Regra não encontrada');
+    await this.prisma.communicationRule.delete({ where: { id: ruleId } });
+    return { deleted: true };
+  }
 
   @Post('creditors/:creditorId/wallets')
   @Roles('ADMIN', 'OPERATIONAL')
