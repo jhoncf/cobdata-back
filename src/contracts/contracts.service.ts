@@ -682,7 +682,7 @@ export class ContractsService {
 
     const skip = (page - 1) * limit;
 
-    const [contracts, total] = await Promise.all([
+    const [contracts, total, agreementTotals] = await Promise.all([
       this.prisma.contract.findMany({
         where,
         skip,
@@ -697,6 +697,15 @@ export class ContractsService {
         include: { tags: { select: { tag: true } } },
       }),
       includeTotal ? this.prisma.contract.count({ where }) : Promise.resolve(0),
+      // The creditor portal needs a total for the whole filtered period, not
+      // only for the current table page. Keep it based on the exact same
+      // predicate used by the list, so CPF/contract and date filters agree.
+      includeTotal && agreementOnly
+        ? this.prisma.contract.aggregate({
+          where,
+          _sum: { agreementTotalAmount: true },
+        })
+        : Promise.resolve(null),
     ]);
 
     // Mask document for VIEWER and flatten tags
@@ -717,6 +726,9 @@ export class ContractsService {
     return {
       data,
       meta: { total, page, limit, totalPages },
+      ...(agreementTotals
+        ? { summary: { agreementTotalAmount: Number(agreementTotals._sum.agreementTotalAmount ?? 0) } }
+        : {}),
     };
   }
 
