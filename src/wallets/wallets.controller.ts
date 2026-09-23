@@ -88,13 +88,13 @@ export class WalletsController {
   @Audit({ action: 'COMMUNICATION_RULE_CREATE', resourceType: 'Wallet' })
   async createCommunicationRule(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { name: string; schedule: Record<string, unknown>; conditions: Array<Record<string, unknown>>; channel: string; templateId: string },
+    @Body() body: { name: string; schedule: Record<string, unknown>; conditions: Array<Record<string, unknown>>; templateId: string },
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.assertWallet(id, user.accountId);
     const frequency = String(body.schedule?.frequency);
     const time = String(body.schedule?.time);
-    if (!body.name?.trim() || !['DAILY', 'WEEKLY'].includes(frequency) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !Array.isArray(body.conditions) || body.conditions.length > 20 || !['SMS', 'EMAIL', 'AI_VOICE_CALL'].includes(body.channel)) {
+    if (!body.name?.trim() || !['DAILY', 'WEEKLY'].includes(frequency) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !Array.isArray(body.conditions) || body.conditions.length > 20) {
       throw new BadRequestException('A regra de comunicação está inválida');
     }
     for (const condition of body.conditions) {
@@ -102,9 +102,11 @@ export class WalletsController {
       if (condition.field === 'paymentStatus' && !['OPEN', 'IN_AGREEMENT', 'INSTALLMENT', 'AGREEMENT_BREACHED', 'PAID'].includes(String(condition.value))) throw new BadRequestException('Status financeiro inválido');
       if (condition.field !== 'paymentStatus' && (!Number.isFinite(Number(condition.value)) || Number(condition.value) < 0)) throw new BadRequestException('Condições numéricas devem ser positivas');
     }
-    const template = await this.prisma.communicationTemplate.findFirst({ where: { id: body.templateId, accountId: user.accountId, channel: body.channel, OR: [{ walletId: id }, { walletId: null, isDefault: true }] } });
-    if (!template) throw new BadRequestException('Escolha um template válido para este canal');
-    return this.prisma.communicationRule.create({ data: { accountId: user.accountId, walletId: id, createdByUserId: user.id, name: body.name.trim().slice(0, 120), schedule: body.schedule as Prisma.InputJsonValue, conditions: body.conditions as Prisma.InputJsonValue, channel: body.channel, templateId: template.id }, include: { template: true } });
+    // The template is the source of truth for the communication channel.
+    // This prevents a rule from declaring SMS while using an e-mail model.
+    const template = await this.prisma.communicationTemplate.findFirst({ where: { id: body.templateId, accountId: user.accountId, OR: [{ walletId: id }, { walletId: null, isDefault: true }] } });
+    if (!template) throw new BadRequestException('Escolha um modelo válido para esta carteira');
+    return this.prisma.communicationRule.create({ data: { accountId: user.accountId, walletId: id, createdByUserId: user.id, name: body.name.trim().slice(0, 120), schedule: body.schedule as Prisma.InputJsonValue, conditions: body.conditions as Prisma.InputJsonValue, channel: template.channel, templateId: template.id }, include: { template: true } });
   }
 
   @Patch('wallets/:id/communication/rules/:ruleId')
