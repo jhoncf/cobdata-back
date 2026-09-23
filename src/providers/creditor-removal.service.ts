@@ -85,11 +85,20 @@ export class CreditorRemovalService {
   private async resolve(rows: RemovalRow[], accountId: string, creditorId: string) {
     const pairs = [...new Map(rows.map((row) => [`${row.contractNumber}|${row.debtorDocument}`, row])).values()];
     const contracts: Array<Pick<Contract, 'id' | 'contractNumber' | 'debtorDocument' | 'updatedValue' | 'occurrenceDate' | 'status' | 'paymentStatus'>> = [];
-    // Larger batches reduce round trips substantially for sizeable files while
-    // keeping the generated OR condition within PostgreSQL's safe range.
-    for (let offset = 0; offset < pairs.length; offset += 500) {
+    // Query the two indexed dimensions in batches and verify the exact
+    // contract/document pair below. This avoids a very large OR predicate,
+    // which becomes prohibitively expensive on creditor files with thousands
+    // of rows.
+    for (let offset = 0; offset < pairs.length; offset += 2000) {
+      const batch = pairs.slice(offset, offset + 2000);
       contracts.push(...await this.prisma.contract.findMany({
-        where: { accountId, deletedAt: null, wallet: { creditorId }, OR: pairs.slice(offset, offset + 500).map((row) => ({ contractNumber: row.contractNumber, debtorDocument: row.debtorDocument })) },
+        where: {
+          accountId,
+          deletedAt: null,
+          wallet: { creditorId },
+          contractNumber: { in: [...new Set(batch.map((row) => row.contractNumber))] },
+          debtorDocument: { in: [...new Set(batch.map((row) => row.debtorDocument))] },
+        },
         select: { id: true, contractNumber: true, debtorDocument: true, updatedValue: true, occurrenceDate: true, status: true, paymentStatus: true },
       }));
     }
