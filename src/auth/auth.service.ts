@@ -375,6 +375,7 @@ export class AuthService {
         name: true,
         role: true,
         creditorId: true,
+        creditor: { select: { name: true, tradeName: true } },
         scopes: { select: { walletId: true } },
       },
     });
@@ -389,6 +390,7 @@ export class AuthService {
       name: user.name,
       role: user.role,
       creditorId: user.creditorId,
+      creditorName: user.creditor?.tradeName?.trim() || user.creditor?.name?.trim() || null,
       scopes: user.role === 'VIEWER' ? user.scopes.map((s) => s.walletId) : [],
     };
   }

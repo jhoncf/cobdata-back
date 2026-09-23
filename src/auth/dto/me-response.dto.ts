@@ -16,6 +16,9 @@ export class MeResponseDto {
   @ApiPropertyOptional({ description: 'Creditor assigned to a restricted portal user', nullable: true })
   creditorId?: string | null;
 
+  @ApiPropertyOptional({ description: 'Display name of the creditor assigned to a restricted portal user', nullable: true })
+  creditorName?: string | null;
+
   @ApiProperty({ description: 'Wallet IDs for VIEWER, empty for others' })
   scopes!: string[]; // walletIds for VIEWER, empty for others
 }
