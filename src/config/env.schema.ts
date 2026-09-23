@@ -31,11 +31,12 @@ export const envSchema = z.object({
   // S3/MinIO
   S3_ENDPOINT: z.string().default('localhost'),
   S3_PORT: z.coerce.number().default(9000),
-  S3_ACCESS_KEY: z.string(),
-  S3_SECRET_KEY: z.string(),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
   S3_BUCKET: z.string().default('cobdata-imports'),
   S3_USE_SSL: z.string().default('false').transform(v => v === 'true'),
   STORAGE_PROVIDER: z.enum(['minio', 'aws']).default('minio'),
+  AWS_REGION: z.string().default('us-east-1'),
 
   // Serasa
   SERASA_API_URL: z.string().url().optional(),

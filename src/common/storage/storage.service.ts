@@ -32,8 +32,8 @@ export class StorageService implements OnModuleInit {
         endpoint: `${useSsl ? 'https' : 'http'}://${endpoint}:${port}`,
         region: 'us-east-1',
         credentials: {
-          accessKeyId: this.configService.get<string>('S3_ACCESS_KEY')!,
-          secretAccessKey: this.configService.get<string>('S3_SECRET_KEY')!,
+          accessKeyId: this.configService.get<string>('S3_ACCESS_KEY') ?? '',
+          secretAccessKey: this.configService.get<string>('S3_SECRET_KEY') ?? '',
         },
         forcePathStyle: true,
       });

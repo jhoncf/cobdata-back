@@ -8,16 +8,6 @@ services:
       - redis_data:/data
     networks: [internal]
 
-  minio:
-    image: minio/minio:latest
-    restart: unless-stopped
-    entrypoint: /bin/sh
-    command: -c 'export MINIO_ROOT_USER="$$S3_ACCESS_KEY"; export MINIO_ROOT_PASSWORD="$$S3_SECRET_KEY"; exec minio server /data'
-    env_file: .env.production
-    volumes:
-      - minio_data:/data
-    networks: [internal]
-
   migrate:
     build:
       context: .
@@ -25,7 +15,7 @@ services:
     env_file: .env.production
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on: [redis, minio]
+    depends_on: [redis]
     networks: [internal]
     restart: "no"
 
@@ -49,4 +39,3 @@ networks:
 
 volumes:
   redis_data:
-  minio_data:
