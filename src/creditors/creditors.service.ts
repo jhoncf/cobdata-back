@@ -273,6 +273,7 @@ export class CreditorsService {
       syncEveryDays: dto.syncEveryDays ?? existing?.syncEveryDays ?? 1,
       syncAtHour: dto.syncAtHour ?? existing?.syncAtHour ?? 7,
       syncAtMinute: dto.syncAtMinute ?? existing?.syncAtMinute ?? 0,
+      ixcReceivingAccountId: dto.ixcReceivingAccountId?.trim() || existing?.ixcReceivingAccountId || null,
     };
     const integration = await this.prisma.creditorIntegration.upsert({
       where: { creditorId_type: { creditorId: id, type: 'IXC' } },
@@ -456,6 +457,7 @@ export class CreditorsService {
     syncEveryDays: number;
     syncAtHour: number;
     syncAtMinute: number;
+    ixcReceivingAccountId: string | null;
     createdAt: Date;
     updatedAt: Date;
   }) {
@@ -469,6 +471,7 @@ export class CreditorsService {
       syncEveryDays: integration.syncEveryDays,
       syncAtHour: integration.syncAtHour,
       syncAtMinute: integration.syncAtMinute,
+      ixcReceivingAccountId: integration.ixcReceivingAccountId,
       lastTestedAt: integration.lastTestedAt,
       lastTestSucceeded: integration.lastTestSucceeded,
       lastTestMessage: integration.lastTestMessage,
