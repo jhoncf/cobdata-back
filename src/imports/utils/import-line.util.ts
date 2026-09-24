@@ -129,6 +129,22 @@ export function normalizeColumnMapping(
 
 export function normalizeImportLine(line: ImportLineData): ImportLineData {
   const normalized = { ...line };
+
+  // Some ERP/Excel layouts serialise a CNPJ with one superfluous leading
+  // zero (for example, 043.766.144.0001-66).  It is not a 15-digit document:
+  // it is the valid 14-digit CNPJ 43.766.144/0001-66 with display padding.
+  // Remove only that exact padding pattern; valid CPF/CNPJ values otherwise
+  // keep their original digits and still go through check-digit validation.
+  const debtorDocument = normalized.debtorDocument?.trim();
+  if (debtorDocument) {
+    const digits = debtorDocument.replace(/\D/g, '');
+    if (digits.length === 15 && digits.startsWith('0')) {
+      normalized.debtorDocument = digits.slice(1);
+    } else {
+      normalized.debtorDocument = digits;
+    }
+  }
+
   for (const field of ['occurrenceDate', 'dueDate', 'productAdhesionDate', 'cancelledAt']) {
     const value = normalized[field]?.trim();
     if (value && /^\d{8}$/.test(value)) {
