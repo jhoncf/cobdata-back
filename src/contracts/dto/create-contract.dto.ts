@@ -23,10 +23,10 @@ export class CreateContractDto {
   @IsUUID()
   walletId!: string;
 
-  @ApiProperty({ description: 'Debtor CPF (11 digits) or CNPJ (14 digits)', example: '12345678901' })
+  @ApiProperty({ description: 'Debtor CPF (11 digits) or CNPJ (14 numeric or alphanumeric positions)', example: '12345678901' })
   @IsString()
   @IsDocument({
-    message: 'debtorDocument must be a valid CPF (11 digits) or CNPJ (14 digits) with valid check digits',
+    message: 'debtorDocument must be a valid CPF (11 digits) or CNPJ (14 alphanumeric characters) with valid check digits',
   })
   debtorDocument!: string;
 

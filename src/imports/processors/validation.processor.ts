@@ -214,15 +214,15 @@ export class ValidationProcessor extends WorkerHost {
       return errors;
     }
 
-    // Validate debtorDocument (CPF: 11 digits, CNPJ: 14 digits)
+    // Validate debtorDocument (CPF: 11 digits, CNPJ: 14 alphanumeric positions)
     const debtorDoc = line['debtorDocument'] || '';
-    const doc = debtorDoc.replace(/\D/g, '');
-    if (doc.length !== 11 && doc.length !== 14) {
+    const doc = debtorDoc.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!/^\d{11}$/.test(doc) && !/^[A-Z0-9]{12}\d{2}$/.test(doc)) {
       errors.push({
         lineNumber,
         errorCode: 'INVALID_FORMAT',
         fieldName: 'debtorDocument',
-        message: 'Documento do devedor deve ter 11 (CPF) ou 14 (CNPJ) dígitos',
+        message: 'Documento do devedor deve ser CPF com 11 dígitos ou CNPJ com 14 caracteres alfanuméricos',
         fieldValue: line['debtorDocument'],
       });
     } else if (doc.length === 11 && !isValidCpf(doc)) {

@@ -40,12 +40,16 @@ describe('isValidCnpj', () => {
       expect(isValidCnpj('')).toBe(false);
     });
 
-    it('should return false for string with non-numeric characters', () => {
-      expect(isValidCnpj('11.222.333/0001-81')).toBe(false);
+    it('should accept the printed mask of a numeric CNPJ', () => {
+      expect(isValidCnpj('11.222.333/0001-81')).toBe(true);
     });
 
-    it('should return false for alphabetic characters', () => {
-      expect(isValidCnpj('1122233300018a')).toBe(false);
+    it('should accept a valid Receita Federal alphanumeric CNPJ', () => {
+      expect(isValidCnpj('12.ABC.345/01DE-35')).toBe(true);
+    });
+
+    it('should reject an alphanumeric CNPJ with an invalid check digit', () => {
+      expect(isValidCnpj('12.ABC.345/01DE-36')).toBe(false);
     });
   });
 

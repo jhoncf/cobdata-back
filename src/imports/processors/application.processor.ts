@@ -193,7 +193,7 @@ export class ApplicationProcessor extends WorkerHost {
           for (const line of chunk) {
 
           // Extract mapped fields
-          const debtorDoc = (line['debtorDocument'] || '').replace(/\D/g, '');
+          const debtorDoc = (line['debtorDocument'] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
           const debtorName = line['debtorName']?.trim() || '';
           const parsedBirthDate = ApplicationProcessor.toValidDate(line['debtorBirthDate']);
           // Optional enrichment only: malformed or future birth dates are
@@ -566,8 +566,8 @@ export class ApplicationProcessor extends WorkerHost {
    * Lines that were marked invalid during validation are excluded.
    */
   private isLineValid(line: LineData, defaultDebtType: string): boolean {
-    const debtorDoc = (line['debtorDocument'] || '').replace(/\D/g, '');
-    if (debtorDoc.length !== 11 && debtorDoc.length !== 14) return false;
+    const debtorDoc = (line['debtorDocument'] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!/^\d{11}$/.test(debtorDoc) && !/^[A-Z0-9]{12}\d{2}$/.test(debtorDoc)) return false;
 
     const contractNumber = line['contractNumber'] || '';
     if (!contractNumber.trim()) return false;

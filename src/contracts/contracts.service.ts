@@ -14,6 +14,7 @@ import { BulkTransferContractsDto } from './dto/bulk-transfer-contracts.dto';
 import { Contract, ContractStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PaginatedResponse } from '../common/dto/paginated-response.dto';
 import { calculateOffer } from './offer-calculator';
+import { normalizeCnpj } from '../common/utils';
 
 /**
  * Allowed serasaStatus values that permit editing/deleting a contract.
@@ -78,6 +79,9 @@ export class ContractsService {
     dto: CreateContractDto,
     accountId: string,
   ): Promise<Contract> {
+    // CPF remains numeric; CNPJ can now carry the official alphanumeric
+    // positions. Store the canonical unmasked representation in both cases.
+    const debtorDocument = normalizeCnpj(dto.debtorDocument);
     // 1. Validate wallet exists, is ACTIVE, not deleted
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: dto.walletId, accountId, deletedAt: null },
@@ -114,7 +118,7 @@ export class ContractsService {
     // CPF/CNPJ + número do contrato + vencimento são a identidade do contrato
     // dentro do credor. Origem e demais campos são dados atualizáveis, nunca
     // criam uma nova cobrança.
-    const debtorDocumentHash = this.deduplicationService.sha256(dto.debtorDocument);
+    const debtorDocumentHash = this.deduplicationService.sha256(debtorDocument);
     const dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
     const identityMatches = await this.prisma.contract.findMany({
       where: {
@@ -136,7 +140,7 @@ export class ContractsService {
     // 5. Compute deduplication key
     const deduplicationKey = this.deduplicationService.computeDeduplicationKey({
       creditorId,
-      debtorDocument: dto.debtorDocument,
+      debtorDocument,
       contractNumber: dto.contractNumber,
       dueDate,
     });
@@ -182,7 +186,7 @@ export class ContractsService {
       // 6a. If exists in SAME wallet → UPDATE (preserve unset fields)
       if (existingContract.walletId === dto.walletId) {
         const updateData: any = {
-          debtorDocument: dto.debtorDocument,
+          debtorDocument,
           ...(dto.debtorName !== undefined ? { debtorName: dto.debtorName } : {}),
           ...(dto.debtorBirthDate !== undefined ? { debtorBirthDate: new Date(dto.debtorBirthDate) } : {}),
           debtorDocumentHash,
@@ -247,7 +251,7 @@ export class ContractsService {
       data: {
         accountId,
         walletId: dto.walletId,
-        debtorDocument: dto.debtorDocument,
+        debtorDocument,
         debtorName: dto.debtorName ?? '',
         debtorBirthDate: dto.debtorBirthDate ? new Date(dto.debtorBirthDate) : null,
         debtorDocumentHash,
@@ -642,13 +646,13 @@ export class ContractsService {
     }
 
     if (debtorDocument) {
-      const hash = this.deduplicationService.sha256(debtorDocument);
+      const hash = this.deduplicationService.sha256(normalizeCnpj(debtorDocument));
       where.debtorDocumentHash = hash;
     }
 
     if (search?.trim()) {
       const term = search.trim();
-      const document = term.replace(/\D/g, '');
+      const document = normalizeCnpj(term);
       const searchConditions: Prisma.ContractWhereInput[] = [
         { contractNumber: { contains: term, mode: 'insensitive' } },
       ];
