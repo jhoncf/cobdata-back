@@ -308,6 +308,23 @@ export class ApplicationProcessor extends WorkerHost {
           }
           const existingContract = existingContracts[0] ?? null;
 
+          // Importing a current portfolio must never change a contract that
+          // has already reached a terminal business state.  In particular,
+          // a paid debt cannot be reintroduced as open and a cancellation
+          // (contestação, solicitação do credor etc.) cannot be undone by a
+          // subsequent spreadsheet.  Keep the record untouched even when
+          // the import targets another wallet.
+          if (
+            existingContract &&
+            (existingContract.paymentStatus === 'PAID' || existingContract.status === 'CANCELLED')
+          ) {
+            ignoredCount++;
+            this.logger.log(
+              `Skipped terminal contract during import ${batchId}: ${contractNumber} (${existingContract.paymentStatus}/${existingContract.status})`,
+            );
+            continue;
+          }
+
           if (!existingContract || existingContract.deletedAt) {
             // CREATE: no existing match
             await tx.contract.create({
