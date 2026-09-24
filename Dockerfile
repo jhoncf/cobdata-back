@@ -15,8 +15,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
+RUN node -e "require.resolve('newrelic')"
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 EXPOSE 3000
-CMD ["node", "dist/src/main.js"]
+CMD ["sh", "-ec", "test -n \"${NEW_RELIC_LICENSE_KEY:-}\"; test -n \"${NEW_RELIC_APP_NAME:-}\"; exec node -r newrelic dist/src/main.js"]
