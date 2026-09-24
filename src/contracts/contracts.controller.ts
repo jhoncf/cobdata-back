@@ -72,11 +72,11 @@ export class ContractsController {
   @ApiResponse({ status: 200, description: 'File containing every contract that matches the filters' })
   async export(
     @Query() query: ListContractsQueryDto,
-    @Query('format') format: 'csv' | 'xlsx' = 'csv',
     @CurrentUser() user: AuthenticatedUser,
     @Req() req: any,
     @Res() res: Response,
   ): Promise<void> {
+    const format = query.format ?? 'csv';
     const contracts = await this.contractsService.export(
       query,
       user.accountId,

@@ -134,6 +134,11 @@ export class ListContractsQueryDto extends PaginationDto {
   @IsString()
   search?: string;
 
+  /** Output format used only by the filtered-contract export endpoint. */
+  @IsOptional()
+  @IsIn(['csv', 'xlsx'])
+  format?: 'csv' | 'xlsx';
+
   @IsOptional()
   @IsIn(['contractNumber', 'debtorName', 'debtorDocument', 'debtType', 'originalValue', 'updatedValue', 'offerValue', 'offerDiscountPercent', 'status', 'paymentStatus', 'serasaStatus', 'occurrenceDate', 'agreementCreatedAt', 'agreementTotalAmount', 'cancelledAt', 'agingDays'])
   sortBy?: 'contractNumber' | 'debtorName' | 'debtorDocument' | 'debtType' | 'originalValue' | 'updatedValue' | 'offerValue' | 'offerDiscountPercent' | 'status' | 'paymentStatus' | 'serasaStatus' | 'occurrenceDate' | 'agreementCreatedAt' | 'agreementTotalAmount' | 'cancelledAt' | 'agingDays';
