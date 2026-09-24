@@ -334,9 +334,6 @@ model CreditorIntegration {
   syncEveryDays        Int                     @default(1)
   syncAtHour           Int                     @default(7)
   syncAtMinute         Int                     @default(0)
-  /// IXC `id_conta` that must receive payment settlements for this creditor.
-  /// Kept as text because IXC installations may use non-numeric identifiers.
-  ixcReceivingAccountId String?
   lastTestedAt         DateTime?
   lastTestSucceeded    Boolean?
   lastTestMessage      String?

@@ -53,12 +53,6 @@ export class UpsertIxcIntegrationDto {
   @Min(0)
   @Max(59)
   syncAtMinute?: number;
-
-  @ApiPropertyOptional({ example: '27', description: 'ID da conta de recebimento no IXC (id_conta), usada nas baixas de pagamento.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  ixcReceivingAccountId?: string;
 }
 
 export class TestIxcIntegrationDto {
